@@ -1,0 +1,162 @@
+---
+title: "`r projetos::get_tema(params$title)`"
+subtitle: "Relatório n. `r params$title`"
+lang: pt
+mainfont: "Leelawadee"
+papersize: A4
+date: last-modified
+date-format: "[São Paulo ] \nDD [de] MMMM [de] YYYY"
+author: 
+  - name: "`r projetos::get_author()`" 
+    affiliations:
+      - name: "Assessor do MP"
+params:
+  title: "02/2023" # mudar
+  quesitos: false # mudar (mas ainda não está funcionando, tem que esperar o release 1.4 do Quarto)
+format: 
+  titlepage-pdf:
+    titlepage: "academic"
+    titlepage-logo: "img/logo-mp.png"
+    titlepage-header: "Ministério Público do Estado de São Paulo"
+    titlepage-theme:
+      logo-size: "0.5\\textheight"
+      logo-space-after: "0.01\\baselineskip"
+    
+    coverpage: true
+    coverpage-bg-image: "img/jurimetria-bg.png"
+    coverpage-header: "Jurimetria"
+    coverpage-theme: 
+
+      header-style: "plain"
+      header-align: center
+      header-fontfamily: "Leelawadee"
+      header-fontsize: 70
+      header-bottom: "1\\paperwidth"
+      header-width: "1\\paperwidth"
+      
+      title-style: "plain"
+      title-align: center
+      title-fontfamily: "Leelawadee"
+      title-fontsize: 40
+      title-bottom: "0.7\\paperwidth"
+      title-width: "1\\paperwidth"
+      
+      author-style: "plain"
+      author-align: center
+      author-fontstyle: "Large"
+      author-fontfamily: "Leelawadee"
+      author-bottom: "0.45\\paperwidth"
+      author-width: "0.3\\paperwidth"
+            
+      date-style: "plain"
+      date-align: center
+      date-fontstyle: "Large"
+      date-fontfamily: "Leelawadee"
+      date-bottom: "0.35\\paperwidth"
+      date-width: "1\\paperwidth"
+      
+bibliography: referencias.bib
+link-citations: true
+csl: http://www.zotero.org/styles/civitas-revista-de-ciencias-sociais
+# csl: http://www.zotero.org/styles/brazilian-journal-of-infectious-diseases
+# csl: http://www.zotero.org/styles/brazilian-journal-of-veterinary-research-and-animal-science
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+
+# Introdução
+
+```{r informacoes-pedido}
+pedido <- params$title
+
+solicitacoes <- projetos::get_solicitacoes() |> 
+  dplyr::filter(id_solicitacao == pedido)
+
+promotor <- solicitacoes |> 
+  dplyr::pull(nome_solicitante)
+
+dr <- ifelse(genderBR::get_gender(promotor) == "Female", "pela Dra.", "pelo Dr.")
+
+pesquisador <- "{{< meta author >}}"
+
+cao <- solicitacoes |> dplyr::pull(unidade_solicitante)
+
+tema <- "{{< meta title >}}"
+```
+
+```{r setup, include=FALSE}
+# Format integers
+knit_print.integer = function(x, ...) {
+  prettyNum(x, big.mark=".", decimal.mark=",")
+}
+
+registerS3method(
+  "knit_print", "integer", knit_print.integer,
+  envir = asNamespace("knitr")
+)
+
+# Format dates
+knit_print.Date = function(x, ...) {
+  format(x, "%d/%m/%Y")
+}
+
+registerS3method(
+  "knit_print", "Date", knit_print.Date,
+  envir = asNamespace("knitr")
+)
+
+# Format table
+flextable::set_flextable_defaults(
+  digits = 2,
+  big.mark=".", 
+  decimal.mark=","
+)
+
+```
+
+```{r informacoes-base}
+base <- proj202401::da_improbidade # exemplo trocar
+```
+
+Esta pesquisa foi solicitada `r dr` `r promotor`, do `r cao`, a respeito do tema `r tema`. A pessoa responsável por realizar a pesquisa foi `r pesquisador`. Foram analisados `r nrow(base)` processos, distribuídos entre `r format(min(base$dt_dist), "%d/%m/%Y")` e `r format(max(base$dt_dist), "%d/%m/%Y")`.
+
+## Perguntas da pesquisa
+
+```{r}
+quesitos <- solicitacoes |> 
+  dplyr::pull(perguntas) 
+```
+
+A pesquisa objetivou responder aos seguintes pedidos:
+
+`r quesitos`
+
+# Metodologia
+
+Todo projeto de jurimetria deve se preocupar com duas questões metodológicas: (1) o não-enviesamento dos dados analisados e (2) a qualidade dos dados. Cada uma dessas questões é endereçada por uma etapa metodológica própria. O viés dos dados é controlado pela etapa de listagem dos processos, enquanto a qualidade dos dados é controlada pela etapa de extração dos dados. 
+
+## Listagem
+
+**[especificar a listagem]**
+
+# Resultados
+
+**[apresentar resultados]**
+
+# Conclusão 
+
+<!-- ::: {.content-visible when-meta="params.quesitos"} -->
+
+<!-- # Resposta aos quesitos -->
+
+<!-- ## Quesito n -->
+
+<!-- ## Quesito n -->
+
+<!-- ## Quesito n -->
+
+<!-- ::: -->
+
