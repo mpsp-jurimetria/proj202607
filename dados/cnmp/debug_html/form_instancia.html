@@ -1,0 +1,371 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml" xmlns:p="http://primefaces.prime.com.tr/ui"><head>
+		<meta http-equiv="X-UA-Compatible" content="IE=8"> <!-- Tag usada para resolver o problema do processando do IE 10. -->
+		<link class="component" href="/a4j/s/3_3_3.Finalorg/richfaces/renderkit/html/css/basic_classes.xcss/DATB/eAELXT5DOhSIAQ!sA18_" rel="stylesheet" type="text/css"><link class="component" href="/a4j/s/3_3_3.Finalorg/richfaces/renderkit/html/css/extended_classes.xcss/DATB/eAELXT5DOhSIAQ!sA18_" rel="stylesheet" type="text/css"><link class="component" href="/a4j/s/3_3_3.Finalcss/toolBar.xcss/DATB/eAELXT5DOhSIAQ!sA18_" rel="stylesheet" type="text/css"><script src="/a4j/g/3_3_3.Finalorg.ajax4jsf.javascript.PrototypeScript" type="text/javascript"></script><script src="/a4j/g/3_3_3.Finalorg.ajax4jsf.javascript.AjaxScript" type="text/javascript"></script><script src="/a4j/g/3_3_3.Finalscripts/menu.js" type="text/javascript"></script><link class="component" href="/a4j/s/3_3_3.Finalcss/dropdownmenu.xcss/DATB/eAELXT5DOhSIAQ!sA18_" rel="stylesheet" type="text/css"><script src="/a4j/g/3_3_3.Finalorg/richfaces/renderkit/html/scripts/utils.js" type="text/javascript"></script><script src="/a4j/g/3_3_3.Finalorg/ajax4jsf/javascript/scripts/form.js" type="text/javascript"></script><script src="/a4j/g/3_3_3.Finalorg/richfaces/renderkit/html/scripts/form.js" type="text/javascript"></script><script src="/a4j/g/3_3_3.Finalorg/richfaces/renderkit/html/scripts/menu.js" type="text/javascript"></script><link class="component" href="/a4j/s/3_3_3.Finalcss/menucomponents.xcss/DATB/eAELXT5DOhSIAQ!sA18_" rel="stylesheet" type="text/css"><script src="/a4j/g/3_3_3.Finalorg/richfaces/renderkit/html/scripts/browser_info.js" type="text/javascript"></script><script src="/a4j/g/3_3_3.Finalorg/richfaces/renderkit/html/scripts/modalPanel.js" type="text/javascript"></script><script src="/a4j/g/3_3_3.Finalorg/richfaces/renderkit/html/scripts/modalPanelBorders.js" type="text/javascript"></script><link class="component" href="/a4j/s/3_3_3.Finalorg/richfaces/renderkit/html/css/modalPanel.xcss/DATB/eAELXT5DOhSIAQ!sA18_" rel="stylesheet" type="text/css"><script src="/a4j/g/3_3_3.Finalorg/richfaces/renderkit/html/scripts/jquery/jquery.js" type="text/javascript"></script><script src="/a4j/g/3_3_3.Finalorg/richfaces/renderkit/html/scripts/tooltip.js" type="text/javascript"></script><link class="component" href="/a4j/s/3_3_3.Finalorg/richfaces/renderkit/html/css/tooltip.xcss/DATB/eAELXT5DOhSIAQ!sA18_" rel="stylesheet" type="text/css"><script src="/a4j/g/3_3_3.Finalorg/richfaces/renderkit/html/scripts/json/json-dom.js" type="text/javascript"></script><script src="/a4j/g/3_3_3.Finalorg/richfaces/renderkit/html/js/FileUpload.js" type="text/javascript"></script><script src="/a4j/g/3_3_3.Finalorg/richfaces/renderkit/html/js/swfobject.js" type="text/javascript"></script><script src="/a4j/g/3_3_3.Finalorg/richfaces/renderkit/html/js/progressBar.js" type="text/javascript"></script><link class="component" href="/a4j/s/3_3_3.Finalorg/richfaces/renderkit/html/css/fileUpload.xcss/DATB/eAELXT5DOhSIAQ!sA18_" rel="stylesheet" type="text/css"><link class="component" href="/a4j/s/3_3_3.Finalorg/richfaces/renderkit/html/css/progressBar.xcss/DATB/eAELXT5DOhSIAQ!sA18_" rel="stylesheet" type="text/css"><link class="component" href="/a4j/s/3_3_3.Finalcss/panel.xcss/DATB/eAELXT5DOhSIAQ!sA18_" rel="stylesheet" type="text/css"><link class="component" href="/a4j/s/3_3_3.Finalcss/table.xcss/DATB/eAELXT5DOhSIAQ!sA18_" rel="stylesheet" type="text/css"><script type="text/javascript">window.RICH_FACES_EXTENDED_SKINNING_ON=true;</script><script src="/a4j/g/3_3_3.Finalorg/richfaces/renderkit/html/scripts/skinning.js" type="text/javascript"></script><link class="user" href="/stylesheet/default.css" rel="stylesheet" type="text/css"><link class="user" href="/stylesheet/custom.css" rel="stylesheet" type="text/css"></head><body><p:resources></p:resources> <!-- Tag usada para carregar os recursos utilizados pelo Primefaces. -->
+		
+		<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+		<meta http-equiv="PRAGMA" content="NO-CACHE">
+		<meta http-equiv="CACHE-CONTROL" content="NO-CACHE">
+		<meta http-equiv="Expires" content="-1">
+		<title>Sistema de Resoluções </title>
+		<link rel="shortcut icon" type="image/x-icon" href="/favicon.ico">
+
+		<script type="text/javascript" language="javascript">
+			// O nome da função não ficou muito bom, pq depois acrescentei a ação de dar a mensagem caso
+			// existam campos obrigatórios não preenchidos, pensar em um nome melhor depois.
+			
+			// Esta função está replicada na página visualizar_formulario.xhtml.
+			// Estranhamente colocar a função no arquivo util.custom.js não funcionou e por isso fui forçado
+			// a replicar o código da função nesses dois htmls.
+			function limparCampos(numeroCampo, existemCamposNaoPreenchidos) {
+
+				if(!existemCamposNaoPreenchidos) {
+					div = document.getElementById('div_' + numeroCampo);
+	
+					todosElementos = document.getElementsByTagName("input");
+	
+					todosElementos2 = document.getElementsByTagName("select");
+					
+					for(var i = 0; i < todosElementos.length; i++) {
+						var campo = todosElementos.item(i);
+
+						// O funcionamento da função está diretamente vinculado à existência
+						// de 3 níveis entre os campos e a div.
+						// Caso algum outro nível seja adicionado essa linha precisa ser revista.
+						if(campo.parentNode.parentNode.parentNode == div) {
+							campo.value = "";
+						}
+	
+					}
+	
+					for(var i = 0; i < todosElementos2.length; i++) {
+						var campo = todosElementos2.item(i);
+
+						// O funcionamento da função está diretamente vinculado à existência
+						// de exatamente 3 níveis entre os campos e a div.
+						// Caso algum outro nível (nova div, span, etc) seja adicionado essa linha precisa ser revista.
+						if(campo.parentNode.parentNode.parentNode == div) {
+							campo.childNodes.item(0).selected = 'selected';
+						}
+	
+					}
+				}
+
+				else {
+					alert('Por favor, preencha os campos obrigatórios.');
+				}
+			}
+		</script>
+		
+        <script language="javascript" type="text/javascript" src="/script/jquery-3.2.1.min.js"></script>
+        <script type="text/javascript">
+            var jQuery321 = $.noConflict();
+        </script>
+        <script language="javascript" type="text/javascript" src="/script/jquery-ui-1.12.1.min.js"></script>
+        <script language="javascript" type="text/javascript" src="/script/jquery.maskedinput-1.4.1.min.js"></script>
+        <script language="javascript" type="text/javascript" src="/script/jquery-custom-validations.js"></script>
+        <script language="javascript" type="text/javascript" src="/script/util.custom.js"></script>
+        <link rel="stylesheet" href="/stylesheet/jquery-ui-1.12.1.min.css">
+		<script language="javascript" type="text/javascript" src="/script/jquery-ui-timepicker-addon.min.js"></script>
+		<script language="javascript" type="text/javascript" src="/script/jquery-ui-timepicker-pt-BR.js"></script>
+		<link rel="stylesheet" href="/stylesheet/jquery-ui-timepicker-addon.min.css">
+	
+		<style type="text/css">
+			ul#menu {
+				border: 1px solid black;
+				background: white;
+				margin: 0;
+				padding: 0;
+				list-style-type: none;
+			}
+			
+			ul#menu li {
+				font-family: Geneva, Arial, Helvetica, sans-serif;
+				font-size: 12px;				
+				font-weight: bolder;
+				border-bottom: 1px solid black;
+				padding: 4px;				
+			}
+			
+			ul#menu li a:link {
+				font-weight: bolder;
+				color: black;
+			}
+			
+			ul#menu li:hover {
+			
+				background: #ABABAB;
+			
+			}
+			
+			ul#menu li a:link.atual {
+				font-weight: bolder;
+				color: #961108;
+			}
+			
+		</style>
+	
+
+	
+		<div class="corpo">
+			
+			<!-- Inclui o cabeçalho da aplicação. -->
+			<div id="divCabecalho" class="cabecalho"><img src="/img/topo_logo_resolucoes.jpg">
+<form id="j_id7" name="j_id7" method="post" action="/usuario/preencher.seam" enctype="application/x-www-form-urlencoded">
+<input type="hidden" name="j_id7" value="j_id7">
+<table border="0" cellpadding="0" cellspacing="0" class="rich-toolbar menu-principal" id="j_id7:j_id8" width="100%"><tbody><tr valign="middle"><td class="rich-toolbar-item "><a href="/usuario/preencher.seam?actionOutcome=home&amp;cid=5270" id="j_id7:j_id9" class="black">Página Inicial</a></td><td class="rich-toolbar-item "><div class="rich-ddmenu-label rich-ddmenu-label-unselect  " id="j_id7:j_id11"><div class="rich-label-text-decor"><span style="color: black; font-weight: bolder;">Monitorar Envio de Formulários</span></div><div style="margin: 0px; padding: 0px; border: 0px; position: absolute; z-index: 100;"><div id="j_id7:j_id11_menu" class="rich-menu-list-border" style="display: none; z-index: 2;"><div class="rich-menu-list-bg"><div class="rich-menu-item rich-menu-item-enabled" id="j_id7:j_id13" onclick="RichFaces.Menu.updateItem(event,this);A4J.AJAX.Submit('j_id7',event,{'similarityGroupingId':'j_id7:j_id13','parameters':{'j_id7:j_id13':'j_id7:j_id13'} } )" style="color: black; font-weight: bolder;"><span class="rich-menu-item-icon  " id="j_id7:j_id13:icon"><img alt="" height="16" src="/a4j/g/3_3_3.Finalimages/spacer.gif" width="16"></span><span class="rich-menu-item-label" id="j_id7:j_id13:anchor">Simples</span></div><div class="rich-menu-list-strut"><div class="rich-menu-list-strut" style="">&nbsp;</div></div></div></div><script id="j_id7:j_id11_menu_script" type="text/javascript">new RichFaces.Menu.Layer('j_id7:j_id11_menu',{'delay':50,'hideDelay':800} ).asDropDown('j_id7:j_id11').addItems([['j_id7:j_id13',{'style':'color: black; font\x2Dweight: bolder;'} ] ] );</script></div></div></td><td class="rich-toolbar-item ">
+			
+			<!--  
+			<s:link value="Monitorar Envio de Formulários" action="usuario.monitorarEnvio"
+				rendered="true" styleClass="black" />
+			--></td><td class="rich-toolbar-item "><a href="/usuario/preencher.seam?actionOutcome=usuario.cadastrarPeriodoInativo&amp;cid=5270" id="j_id7:j_id16" class="black">Cadastrar Período Inativo</a></td><td style="width:100%"></td><td class="rich-toolbar-item  " style=";">Usuário: JOSE DE JESUS FILHO - Corregedoria Resolução 277</td><td class="rich-toolbar-item  " style=";"><a href="/usuario/preencher.seam?actionOutcome=home&amp;cid=5270" id="j_id7:j_id44"><img src="/img/ico_home.png" style="margin:3px 0px;"></a></td><td class="rich-toolbar-item  " style=";"><a href="/usuario/preencher.seam?actionMethod=usuario%2Fpreencher.xhtml%3Aauthenticator.logout%28%29&amp;cid=5270" id="j_id7:j_id46"><img src="/img/ico_exit.png" style="margin:3px 0px;" title="Sair"></a></td></tr></tbody></table><input type="hidden" name="javax.faces.ViewState" id="javax.faces.ViewState" value="j_id6" autocomplete="off">
+</form>
+	
+	<!-- Inclui o quadro com informações para debug do sistema. -->				
+			</div>
+			
+			<!-- Componente de exibição de mensagens de alerta. --><span id="messages"></span>
+
+			<!-- Ponto de inserção de conteúdo específico das páginas baseadas neste template. --><div id="j_id57" class="conteudo"><div id="confirmacaoExclusaoTabela" style="display: none;"><input autocomplete="off" id="confirmacaoExclusaoTabelaOpenedState" name="confirmacaoExclusaoTabelaOpenedState" type="hidden"><div class="rich-modalpanel " id="confirmacaoExclusaoTabelaContainer" style="position: absolute; display: none; z-index: 100; background-color: inherit;"><div class="rich-mpnl-mask-div-opaque rich-mpnl-mask-div" id="confirmacaoExclusaoTabelaDiv" style="z-index: -1;"><button class="rich-mpnl-button" id="confirmacaoExclusaoTabelaFirstHref"></button></div><div class="rich-mpnl-panel"><div class="rich-mp-container" id="confirmacaoExclusaoTabelaCDiv" style="position: absolute; left: 0px; top: 0px; z-index: 9;"><div class="rich-mpnl-shadow" id="confirmacaoExclusaoTabelaShadowDiv"></div><div class="rich-mpnl-ovf-hd rich-mpnl-trim rich-mpnl-content" id="confirmacaoExclusaoTabelaContentDiv"><table border="0" cellpadding="0" cellspacing="0" class="rich-mp-content-table" id="confirmacaoExclusaoTabelaContentTable" style="height: 100%; width: 100%;"><tbody><tr style="height: 1%;"><td class="rich-mpnl-header-cell"><div class="rich-mpnl-text rich-mpnl-header " id="confirmacaoExclusaoTabelaHeader" style="white-space: nowrap; cursor: move;">Atenção</div></td></tr><tr style="height: 99%"><td class="rich-mpnl-body" valign="top">Deseja realmente excluir este registro?
+		
+		<br><br>
+<form id="j_id62" name="j_id62" method="post" action="/usuario/preencher.seam" enctype="application/x-www-form-urlencoded">
+<input type="hidden" name="j_id62" value="j_id62">
+<input id="j_id62:j_id63" name="j_id62:j_id63" onclick="A4J.AJAX.Submit('j_id62',event,{'similarityGroupingId':'j_id62:j_id63','parameters':{'j_id62:j_id63':'j_id62:j_id63'} } );return false;" value="Confirmar" type="button"><input id="j_id62:j_id64" name="j_id62:j_id64" onclick="document.getElementById('confirmacaoExclusaoTabela').component.hide();;A4J.AJAX.Submit('j_id62',event,{'similarityGroupingId':'j_id62:j_id64','parameters':{'j_id62:j_id64':'j_id62:j_id64'} } );return false;" value="Cancelar" type="button"><input type="hidden" name="javax.faces.ViewState" id="javax.faces.ViewState" value="j_id6" autocomplete="off">
+</form></td></tr></tbody></table></div></div></div><div class="rich-mpnl-mask-div rich-mpnl-mask-div-transparent" id="confirmacaoExclusaoTabelaCursorDiv" style="z-index: -200;"><button class="rich-mpnl-button" id="confirmacaoExclusaoTabelaLastHref"></button></div><script type="text/javascript">new ModalPanel('confirmacaoExclusaoTabela',
+				{
+					width: 500,
+					height: 300,
+
+					minWidth: -1,
+					minHeight: -1,
+
+					resizeable: false,
+					moveable: true,
+
+					left: "auto",
+					top: "auto",
+
+					zindex: 100,onresize: '',onmove: '',onshow: '',onhide: '',onbeforeshow: '',onbeforehide: '',
+					domElementAttachment: "",				
+					keepVisualState: false,
+					showWhenRendered: false,
+					selectBehavior: "disable",
+
+					autosized: false,
+					overlapEmbedObjects: false});</script></div><script type="text/javascript"></script></div><div id="j_id65">
+<form id="preenchimentoAbas" name="preenchimentoAbas" method="post" action="/usuario/preencher.seam" enctype="application/x-www-form-urlencoded">
+<input type="hidden" name="preenchimentoAbas" value="preenchimentoAbas">
+
+		
+		<div class="leftMenu">
+			<ul id="menu">
+					<li>
+<script type="text/javascript" language="Javascript">function dpf(f) {var adp = f.adp;if (adp != null) {for (var i = 0;i < adp.length;i++) {f.removeChild(adp[i]);}}};function apf(f, pvp) {var adp = new Array();f.adp = adp;var i = 0;for (k in pvp) {var p = document.createElement("input");p.type = "hidden";p.name = k;p.value = pvp[k];f.appendChild(p);adp[i++] = p;}};function jsfcljs(f, pvp, t) {apf(f, pvp);var ft = f.target;if (t) {f.target = t;}f.submit();f.target = ft;dpf(f);};</script>
+<a href="#" onclick="var a=function(){Richfaces.showModalPanel('modalProcessando');};var b=function(){if(typeof jsfcljs == 'function'){jsfcljs(document.getElementById('preenchimentoAbas'),{'preenchimentoAbas:j_id67:0:j_id69':'preenchimentoAbas:j_id67:0:j_id69'},'');}return false};return (a()==false) ? false : b();" class="atual">SEÇÃO I – IDENTIFICAÇÃO  </a>
+					</li>
+					<li><a href="#" onclick="var a=function(){Richfaces.showModalPanel('modalProcessando');};var b=function(){if(typeof jsfcljs == 'function'){jsfcljs(document.getElementById('preenchimentoAbas'),{'preenchimentoAbas:j_id67:1:j_id69':'preenchimentoAbas:j_id67:1:j_id69'},'');}return false};return (a()==false) ? false : b();" class="">SEÇÃO II – PERFIL DO ESTABELECIMENTO PRISIONAL</a>
+					</li>
+					<li><a href="#" onclick="var a=function(){Richfaces.showModalPanel('modalProcessando');};var b=function(){if(typeof jsfcljs == 'function'){jsfcljs(document.getElementById('preenchimentoAbas'),{'preenchimentoAbas:j_id67:2:j_id69':'preenchimentoAbas:j_id67:2:j_id69'},'');}return false};return (a()==false) ? false : b();" class="">SEÇÃO III – CAPACIDADE E OCUPAÇÃO</a>
+					</li>
+					<li><a href="#" onclick="var a=function(){Richfaces.showModalPanel('modalProcessando');};var b=function(){if(typeof jsfcljs == 'function'){jsfcljs(document.getElementById('preenchimentoAbas'),{'preenchimentoAbas:j_id67:3:j_id69':'preenchimentoAbas:j_id67:3:j_id69'},'');}return false};return (a()==false) ? false : b();" class="">SEÇÃO IV – PERFIL DA POPULAÇÃO PRISIONAL</a>
+					</li>
+					<li><a href="#" onclick="var a=function(){Richfaces.showModalPanel('modalProcessando');};var b=function(){if(typeof jsfcljs == 'function'){jsfcljs(document.getElementById('preenchimentoAbas'),{'preenchimentoAbas:j_id67:4:j_id69':'preenchimentoAbas:j_id67:4:j_id69'},'');}return false};return (a()==false) ? false : b();" class="">SEÇÃO V – SEPARAÇÃO</a>
+					</li>
+					<li><a href="#" onclick="var a=function(){Richfaces.showModalPanel('modalProcessando');};var b=function(){if(typeof jsfcljs == 'function'){jsfcljs(document.getElementById('preenchimentoAbas'),{'preenchimentoAbas:j_id67:5:j_id69':'preenchimentoAbas:j_id67:5:j_id69'},'');}return false};return (a()==false) ? false : b();" class="">SEÇÃO VI – ASSISTÊNCIA MATERIAL</a>
+					</li>
+					<li><a href="#" onclick="var a=function(){Richfaces.showModalPanel('modalProcessando');};var b=function(){if(typeof jsfcljs == 'function'){jsfcljs(document.getElementById('preenchimentoAbas'),{'preenchimentoAbas:j_id67:6:j_id69':'preenchimentoAbas:j_id67:6:j_id69'},'');}return false};return (a()==false) ? false : b();" class="">SEÇÃO VII – ALIMENTAÇÃO</a>
+					</li>
+					<li><a href="#" onclick="var a=function(){Richfaces.showModalPanel('modalProcessando');};var b=function(){if(typeof jsfcljs == 'function'){jsfcljs(document.getElementById('preenchimentoAbas'),{'preenchimentoAbas:j_id67:7:j_id69':'preenchimentoAbas:j_id67:7:j_id69'},'');}return false};return (a()==false) ? false : b();" class="">SEÇÃO VIII – ASSISTÊNCIA À SAÚDE</a>
+					</li>
+					<li><a href="#" onclick="var a=function(){Richfaces.showModalPanel('modalProcessando');};var b=function(){if(typeof jsfcljs == 'function'){jsfcljs(document.getElementById('preenchimentoAbas'),{'preenchimentoAbas:j_id67:8:j_id69':'preenchimentoAbas:j_id67:8:j_id69'},'');}return false};return (a()==false) ? false : b();" class="">SEÇÃO IX – ASSISTÊNCIA JURÍDICA</a>
+					</li>
+					<li><a href="#" onclick="var a=function(){Richfaces.showModalPanel('modalProcessando');};var b=function(){if(typeof jsfcljs == 'function'){jsfcljs(document.getElementById('preenchimentoAbas'),{'preenchimentoAbas:j_id67:9:j_id69':'preenchimentoAbas:j_id67:9:j_id69'},'');}return false};return (a()==false) ? false : b();" class="">SEÇÃO X – ASSISTÊNCIA PSICOSSOCIAL</a>
+					</li>
+					<li><a href="#" onclick="var a=function(){Richfaces.showModalPanel('modalProcessando');};var b=function(){if(typeof jsfcljs == 'function'){jsfcljs(document.getElementById('preenchimentoAbas'),{'preenchimentoAbas:j_id67:10:j_id69':'preenchimentoAbas:j_id67:10:j_id69'},'');}return false};return (a()==false) ? false : b();" class="">SEÇÃO XI – ASSISTÊNCIA RELIGIOSA</a>
+					</li>
+					<li><a href="#" onclick="var a=function(){Richfaces.showModalPanel('modalProcessando');};var b=function(){if(typeof jsfcljs == 'function'){jsfcljs(document.getElementById('preenchimentoAbas'),{'preenchimentoAbas:j_id67:11:j_id69':'preenchimentoAbas:j_id67:11:j_id69'},'');}return false};return (a()==false) ? false : b();" class="">SEÇÃO XII – ASSISTÊNCIA EDUCACIONAL</a>
+					</li>
+					<li><a href="#" onclick="var a=function(){Richfaces.showModalPanel('modalProcessando');};var b=function(){if(typeof jsfcljs == 'function'){jsfcljs(document.getElementById('preenchimentoAbas'),{'preenchimentoAbas:j_id67:12:j_id69':'preenchimentoAbas:j_id67:12:j_id69'},'');}return false};return (a()==false) ? false : b();" class="">SEÇÃO XIII – TRABALHO</a>
+					</li>
+					<li><a href="#" onclick="var a=function(){Richfaces.showModalPanel('modalProcessando');};var b=function(){if(typeof jsfcljs == 'function'){jsfcljs(document.getElementById('preenchimentoAbas'),{'preenchimentoAbas:j_id67:13:j_id69':'preenchimentoAbas:j_id67:13:j_id69'},'');}return false};return (a()==false) ? false : b();" class="">SEÇÃO XIV – INTEGRIDADE FÍSICA</a>
+					</li>
+					<li><a href="#" onclick="var a=function(){Richfaces.showModalPanel('modalProcessando');};var b=function(){if(typeof jsfcljs == 'function'){jsfcljs(document.getElementById('preenchimentoAbas'),{'preenchimentoAbas:j_id67:14:j_id69':'preenchimentoAbas:j_id67:14:j_id69'},'');}return false};return (a()==false) ? false : b();" class="">SEÇÃO XV – DISCIPLINA</a>
+					</li>
+					<li><a href="#" onclick="var a=function(){Richfaces.showModalPanel('modalProcessando');};var b=function(){if(typeof jsfcljs == 'function'){jsfcljs(document.getElementById('preenchimentoAbas'),{'preenchimentoAbas:j_id67:15:j_id69':'preenchimentoAbas:j_id67:15:j_id69'},'');}return false};return (a()==false) ? false : b();" class="">SEÇÃO XVI – VISITAS</a>
+					</li>
+					<li><a href="#" onclick="var a=function(){Richfaces.showModalPanel('modalProcessando');};var b=function(){if(typeof jsfcljs == 'function'){jsfcljs(document.getElementById('preenchimentoAbas'),{'preenchimentoAbas:j_id67:16:j_id69':'preenchimentoAbas:j_id67:16:j_id69'},'');}return false};return (a()==false) ? false : b();" class="">SEÇÃO XVII – REVISTA</a>
+					</li>
+					<li><a href="#" onclick="var a=function(){Richfaces.showModalPanel('modalProcessando');};var b=function(){if(typeof jsfcljs == 'function'){jsfcljs(document.getElementById('preenchimentoAbas'),{'preenchimentoAbas:j_id67:17:j_id69':'preenchimentoAbas:j_id67:17:j_id69'},'');}return false};return (a()==false) ? false : b();" class="">SEÇÃO XVIII – MEDIDAS DE SEGURANÇA</a>
+					</li>
+					<li><a href="#" onclick="var a=function(){Richfaces.showModalPanel('modalProcessando');};var b=function(){if(typeof jsfcljs == 'function'){jsfcljs(document.getElementById('preenchimentoAbas'),{'preenchimentoAbas:j_id67:18:j_id69':'preenchimentoAbas:j_id67:18:j_id69'},'');}return false};return (a()==false) ? false : b();" class="">SEÇÃO XIX – ORGANIZAÇÃO ADMINISTRATIVA</a>
+					</li>
+					<li><a href="#" onclick="var a=function(){Richfaces.showModalPanel('modalProcessando');};var b=function(){if(typeof jsfcljs == 'function'){jsfcljs(document.getElementById('preenchimentoAbas'),{'preenchimentoAbas:j_id67:19:j_id69':'preenchimentoAbas:j_id67:19:j_id69'},'');}return false};return (a()==false) ? false : b();" class="">SEÇÃO XX – POLICIAIS PENAIS E SEGURANÇA DO ESTABELECIMENTO PRISIONAL</a>
+					</li>
+					<li><a href="#" onclick="var a=function(){Richfaces.showModalPanel('modalProcessando');};var b=function(){if(typeof jsfcljs == 'function'){jsfcljs(document.getElementById('preenchimentoAbas'),{'preenchimentoAbas:j_id67:20:j_id69':'preenchimentoAbas:j_id67:20:j_id69'},'');}return false};return (a()==false) ? false : b();" class="">SEÇÃO XXI – ENTREVISTA COM A PESSOA PRIVADA DE LIBERDADE</a>
+					</li>
+					<li><a href="#" onclick="var a=function(){Richfaces.showModalPanel('modalProcessando');};var b=function(){if(typeof jsfcljs == 'function'){jsfcljs(document.getElementById('preenchimentoAbas'),{'preenchimentoAbas:j_id67:21:j_id69':'preenchimentoAbas:j_id67:21:j_id69'},'');}return false};return (a()==false) ? false : b();" class="">SEÇÃO XXII – ENTREVISTA COM SERVIDORES E POLICIAIS PENAIS</a>
+					</li>
+					<li><a href="#" onclick="var a=function(){Richfaces.showModalPanel('modalProcessando');};var b=function(){if(typeof jsfcljs == 'function'){jsfcljs(document.getElementById('preenchimentoAbas'),{'preenchimentoAbas:j_id67:22:j_id69':'preenchimentoAbas:j_id67:22:j_id69'},'');}return false};return (a()==false) ? false : b();" class="">SEÇÃO XXIII – CONSIDERAÇÕES FINAIS</a>
+					</li>
+					<li><a href="#" onclick="var a=function(){Richfaces.showModalPanel('modalProcessando');};var b=function(){if(typeof jsfcljs == 'function'){jsfcljs(document.getElementById('preenchimentoAbas'),{'preenchimentoAbas:j_id67:23:j_id69':'preenchimentoAbas:j_id67:23:j_id69'},'');}return false};return (a()==false) ? false : b();" class="">SEÇÃO XXIV – ANEXOS</a>
+					</li>
+					<li><a href="#" onclick="var a=function(){Richfaces.showModalPanel('modalProcessando');};var b=function(){if(typeof jsfcljs == 'function'){jsfcljs(document.getElementById('preenchimentoAbas'),{'preenchimentoAbas:j_id67:24:j_id69':'preenchimentoAbas:j_id67:24:j_id69'},'');}return false};return (a()==false) ? false : b();" class="">Validar Preenchimento</a>
+					</li>
+			</ul>
+			<br>
+			<br>
+			<br><input type="submit" name="preenchimentoAbas:j_id72" value="Voltar" onclick="Richfaces.showModalPanel('modalProcessando');">
+		</div><div id="preenchimentoAbas:bodyPreenchimento" class="bodyPreenchimento"><div id="preenchimentoAbas:j_id74">
+	
+	<fieldset>
+		
+		<legend>Preenchimento do Formulário - Formulário de Visita de Inspeção Semestral | Estabelecimentos Prisionais</legend><div id="preenchimentoAbas:cabecalho" class="negrito">Entidade: Penitenciária_de Taiúva<span class="left40">CNPJ: 00.000.000/0000-00</span><span class="left40">Estado: SP</span><span class="left40">Município: Taiúva</span>
+				<br>
+				<br>Endereço: RODOVIA BRIGADEIRO FARIA LIMA - KM 359 + 600 metros.<span class="left40">Telefone: (16)3247-6261</span>
+				<br>
+				<br>Período: 1º Sem. (Julho) / 2026</div>
+		
+	</fieldset></div><div id="preenchimentoAbas:secaoAtual">
+			
+				<fieldset>
+				
+					<legend>SEÇÃO I – IDENTIFICAÇÃO  </legend><table>
+<tbody>
+<tr>
+<td><div id="preenchimentoAbas:j_id88"><div id="preenchimentoAbas:j_id89:0:divData"><span style="padding-left: 0px"><label>
+1.1 Data da Visita</label><span style="color: #FF0000;font-size:16px;font-weight:bolder;">*</span><img alt="" class="rich-spacer " height="1" id="preenchimentoAbas:j_id89:0:j_id132" src="/a4j/g/3_3_3.Finalimages/spacer.gif" width="5px"><input id="preenchimentoAbas:j_id89:0:data" type="text" name="preenchimentoAbas:j_id89:0:data" value="22/04/2026" class="datepicker hasDatepicker" maxlength="10" size="15" disabled="disabled"></span><img alt="" class="rich-spacer " height="1" id="preenchimentoAbas:j_id89:0:j_id133" src="/a4j/g/3_3_3.Finalimages/spacer.gif" width="5px">
+									<br><br></div><div id="preenchimentoAbas:j_id89:1:divRadio"><span style="margin-left: 0px"><label>
+1.2 Forma de inspeção</label><span style="color: #FF0000;font-size:16px;font-weight:bolder;">*</span><img alt="" class="rich-spacer " height="1" id="preenchimentoAbas:j_id89:1:j_id298" src="/a4j/g/3_3_3.Finalimages/spacer.gif" width="5px"><table class="margem0px">
+	<tbody><tr>
+<td>
+<input type="radio" checked="checked" name="preenchimentoAbas:j_id89:1:j_id315" id="preenchimentoAbas:j_id89:1:j_id315:0" value="30535" onchange="Richfaces.showModalPanel('modalProcessando');;A4J.AJAX.Submit('preenchimentoAbas',event,{'similarityGroupingId':'preenchimentoAbas:j_id89:1:j_id317','oncomplete':function(request,event,data){formataCampos(); Richfaces.hideModalPanel('modalProcessando');},'parameters':{'preenchimentoAbas:j_id89:1:j_id317':'preenchimentoAbas:j_id89:1:j_id317'} ,'status':'false'} )" disabled="disabled"><label for="preenchimentoAbas:j_id89:1:j_id315:0"> PRESENCIAL</label></td>
+	</tr>
+	<tr>
+<td>
+<input type="radio" name="preenchimentoAbas:j_id89:1:j_id315" id="preenchimentoAbas:j_id89:1:j_id315:1" value="30536" onchange="Richfaces.showModalPanel('modalProcessando');;A4J.AJAX.Submit('preenchimentoAbas',event,{'similarityGroupingId':'preenchimentoAbas:j_id89:1:j_id317','oncomplete':function(request,event,data){formataCampos(); Richfaces.hideModalPanel('modalProcessando');},'parameters':{'preenchimentoAbas:j_id89:1:j_id317':'preenchimentoAbas:j_id89:1:j_id317'} ,'status':'false'} )" disabled="disabled"><label for="preenchimentoAbas:j_id89:1:j_id315:1"> REMOTA</label></td>
+	</tr>
+</tbody></table></span>
+									<br><br></div><div id="preenchimentoAbas:j_id89:2:divRadio"><span style="margin-left: 0px"><label>
+1.3 Estabelecimento prisional destinado a presos do sexo</label><span style="color: #FF0000;font-size:16px;font-weight:bolder;">*</span><img alt="" class="rich-spacer " height="1" id="preenchimentoAbas:j_id89:2:j_id298" src="/a4j/g/3_3_3.Finalimages/spacer.gif" width="5px"><table class="margem0px">
+	<tbody><tr>
+<td>
+<input type="radio" name="preenchimentoAbas:j_id89:2:j_id315" id="preenchimentoAbas:j_id89:2:j_id315:0" value="30555" onchange="Richfaces.showModalPanel('modalProcessando');;A4J.AJAX.Submit('preenchimentoAbas',event,{'similarityGroupingId':'preenchimentoAbas:j_id89:2:j_id317','oncomplete':function(request,event,data){formataCampos(); Richfaces.hideModalPanel('modalProcessando');},'parameters':{'preenchimentoAbas:j_id89:2:j_id317':'preenchimentoAbas:j_id89:2:j_id317'} ,'status':'false'} )" disabled="disabled"><label for="preenchimentoAbas:j_id89:2:j_id315:0"> FEMININO</label></td>
+	</tr>
+	<tr>
+<td>
+<input type="radio" checked="checked" name="preenchimentoAbas:j_id89:2:j_id315" id="preenchimentoAbas:j_id89:2:j_id315:1" value="30556" onchange="Richfaces.showModalPanel('modalProcessando');;A4J.AJAX.Submit('preenchimentoAbas',event,{'similarityGroupingId':'preenchimentoAbas:j_id89:2:j_id317','oncomplete':function(request,event,data){formataCampos(); Richfaces.hideModalPanel('modalProcessando');},'parameters':{'preenchimentoAbas:j_id89:2:j_id317':'preenchimentoAbas:j_id89:2:j_id317'} ,'status':'false'} )" disabled="disabled"><label for="preenchimentoAbas:j_id89:2:j_id315:1"> MASCULINO</label></td>
+	</tr>
+	<tr>
+<td>
+<input type="radio" name="preenchimentoAbas:j_id89:2:j_id315" id="preenchimentoAbas:j_id89:2:j_id315:2" value="30557" onchange="Richfaces.showModalPanel('modalProcessando');;A4J.AJAX.Submit('preenchimentoAbas',event,{'similarityGroupingId':'preenchimentoAbas:j_id89:2:j_id317','oncomplete':function(request,event,data){formataCampos(); Richfaces.hideModalPanel('modalProcessando');},'parameters':{'preenchimentoAbas:j_id89:2:j_id317':'preenchimentoAbas:j_id89:2:j_id317'} ,'status':'false'} )" disabled="disabled"><label for="preenchimentoAbas:j_id89:2:j_id315:2"> AMBOS</label></td>
+	</tr>
+</tbody></table></span>
+									<br><br></div><div id="preenchimentoAbas:j_id89:3:divSimNao"><span style="padding-left: 30px"><label>
+1.3.1 O estabelecimento prisional possui ala/pavilhão para *PPL autodeclaradas LGBTI+?</label><span style="color: #FF0000;font-size:16px;font-weight:bolder;">*</span><img alt="" class="rich-spacer " height="1" id="preenchimentoAbas:j_id89:3:j_id257" src="/a4j/g/3_3_3.Finalimages/spacer.gif" width="5px"><select name="preenchimentoAbas:j_id89:3:j_id258" size="1" onchange="Richfaces.showModalPanel('modalProcessando');;A4J.AJAX.Submit('preenchimentoAbas',event,{'similarityGroupingId':'preenchimentoAbas:j_id89:3:j_id262','oncomplete':function(request,event,data){Richfaces.hideModalPanel('modalProcessando'); formataCampos();},'parameters':{'preenchimentoAbas:j_id89:3:j_id262':'preenchimentoAbas:j_id89:3:j_id262'} ,'status':'false'} )" disabled="disabled">	<option value="2">---</option>
+	<option value="1" selected="selected">Sim</option>
+	<option value="0">Não</option>
+</select></span><img alt="" class="rich-spacer " height="1" id="preenchimentoAbas:j_id89:3:j_id263" src="/a4j/g/3_3_3.Finalimages/spacer.gif" width="5px">
+									<br><br></div><div id="preenchimentoAbas:j_id89:4:divText"><span style="padding-left: 0px"><label>
+1.4 Órgão do Ministério Público responsável pela inspeção do estabelecimento prisional:</label><span style="color: #FF0000;font-size:16px;font-weight:bolder;">*</span><img alt="" class="rich-spacer " height="1" id="preenchimentoAbas:j_id89:4:j_id114" src="/a4j/g/3_3_3.Finalimages/spacer.gif" width="5px"><input type="text" name="preenchimentoAbas:j_id89:4:j_id115" value="Promotoria de Justiça de Jaboticabal" maxlength="200" size="120" disabled="disabled"><img alt="" class="rich-spacer " height="1" id="preenchimentoAbas:j_id89:4:j_id116" src="/a4j/g/3_3_3.Finalimages/spacer.gif" width="5px"></span>
+									<br><br></div><div id="preenchimentoAbas:j_id89:5:divText"><span style="padding-left: 0px"><label>
+1.5 Juízo responsável pelo estabelecimento prisional:</label><span style="color: #FF0000;font-size:16px;font-weight:bolder;">*</span><img alt="" class="rich-spacer " height="1" id="preenchimentoAbas:j_id89:5:j_id114" src="/a4j/g/3_3_3.Finalimages/spacer.gif" width="5px"><input type="text" name="preenchimentoAbas:j_id89:5:j_id115" value="Vara do Júri e Execuções Criminais de Araraquara/SP" maxlength="200" size="120" disabled="disabled"><img alt="" class="rich-spacer " height="1" id="preenchimentoAbas:j_id89:5:j_id116" src="/a4j/g/3_3_3.Finalimages/spacer.gif" width="5px"></span>
+									<br><br></div><div id="preenchimentoAbas:j_id89:6:divText"><span style="padding-left: 0px"><label>
+1.6 Responsável pelo estabelecimento prisional:</label><span style="color: #FF0000;font-size:16px;font-weight:bolder;">*</span><img alt="" class="rich-spacer " height="1" id="preenchimentoAbas:j_id89:6:j_id114" src="/a4j/g/3_3_3.Finalimages/spacer.gif" width="5px"><input type="text" name="preenchimentoAbas:j_id89:6:j_id115" value="Douglas Fernando Semenzin Galdino" maxlength="200" size="120" disabled="disabled"><img alt="" class="rich-spacer " height="1" id="preenchimentoAbas:j_id89:6:j_id116" src="/a4j/g/3_3_3.Finalimages/spacer.gif" width="5px"></span>
+									<br><br></div><div id="preenchimentoAbas:j_id89:7:divData"><span style="padding-left: 30px"><label>
+1.6.1 Data de início do funcionamento do estabelecimento prisional:</label><span style="color: #FF0000;font-size:16px;font-weight:bolder;">*</span><img alt="" class="rich-spacer " height="1" id="preenchimentoAbas:j_id89:7:j_id132" src="/a4j/g/3_3_3.Finalimages/spacer.gif" width="5px"><input id="preenchimentoAbas:j_id89:7:data" type="text" name="preenchimentoAbas:j_id89:7:data" value="18/01/2012" class="datepicker hasDatepicker" maxlength="10" size="15" disabled="disabled"></span><img alt="" class="rich-spacer " height="1" id="preenchimentoAbas:j_id89:7:j_id133" src="/a4j/g/3_3_3.Finalimages/spacer.gif" width="5px">
+									<br><br></div><div id="preenchimentoAbas:j_id89:8:divData"><span style="padding-left: 30px"><label>
+1.6.2 Data do início da gestão do responsável pelo estabelecimento prisional:</label><span style="color: #FF0000;font-size:16px;font-weight:bolder;">*</span><img alt="" class="rich-spacer " height="1" id="preenchimentoAbas:j_id89:8:j_id132" src="/a4j/g/3_3_3.Finalimages/spacer.gif" width="5px"><input id="preenchimentoAbas:j_id89:8:data" type="text" name="preenchimentoAbas:j_id89:8:data" value="09/11/2017" class="datepicker hasDatepicker" maxlength="10" size="15" disabled="disabled"></span><img alt="" class="rich-spacer " height="1" id="preenchimentoAbas:j_id89:8:j_id133" src="/a4j/g/3_3_3.Finalimages/spacer.gif" width="5px">
+									<br><br></div><div id="preenchimentoAbas:j_id89:9:divText"><span style="padding-left: 0px"><label>
+1.7 Responsável pela segurança do estabelecimento prisional</label><span style="color: #FF0000;font-size:16px;font-weight:bolder;">*</span><img alt="" class="rich-spacer " height="1" id="preenchimentoAbas:j_id89:9:j_id114" src="/a4j/g/3_3_3.Finalimages/spacer.gif" width="5px"><input type="text" name="preenchimentoAbas:j_id89:9:j_id115" value="Alfredo Guilherme Lopes" maxlength="200" size="120" disabled="disabled"><img alt="" class="rich-spacer " height="1" id="preenchimentoAbas:j_id89:9:j_id116" src="/a4j/g/3_3_3.Finalimages/spacer.gif" width="5px"></span>
+									<br><br></div><div id="preenchimentoAbas:j_id89:10:divNumber"><span style="padding-left: 0px"><label>
+1.8 Total de pessoas que atuam nas atividades administrativas do estabelecimento prisional:</label><span style="color: #FF0000;font-size:16px;font-weight:bolder;">*</span><img alt="" class="rich-spacer " height="1" id="preenchimentoAbas:j_id89:10:j_id93" src="/a4j/g/3_3_3.Finalimages/spacer.gif" width="5px"><input type="text" name="preenchimentoAbas:j_id89:10:j_id94" value="28" class="somente-digitos" maxlength="5" onkeydown="return somenteNumero(event);" size="6" disabled="disabled"></span><img alt="" class="rich-spacer " height="1" id="preenchimentoAbas:j_id89:10:j_id95" src="/a4j/g/3_3_3.Finalimages/spacer.gif" width="5px">
+									<br><br></div><div id="preenchimentoAbas:j_id89:11:divNumber"><span style="padding-left: 30px"><label>
+1.8.1 Deste total, quantas estão afastadas de suas atividades, inclusive por motivo de saúde?</label><span style="color: #FF0000;font-size:16px;font-weight:bolder;">*</span><img alt="" class="rich-spacer " height="1" id="preenchimentoAbas:j_id89:11:j_id93" src="/a4j/g/3_3_3.Finalimages/spacer.gif" width="5px"><input type="text" name="preenchimentoAbas:j_id89:11:j_id94" value="0" class="somente-digitos" maxlength="5" onkeydown="return somenteNumero(event);" size="6" disabled="disabled"></span><img alt="" class="rich-spacer " height="1" id="preenchimentoAbas:j_id89:11:j_id95" src="/a4j/g/3_3_3.Finalimages/spacer.gif" width="5px">
+									<br><br></div></div></td>
+</tr>
+<tr>
+<td>
+
+						<br><br></td>
+</tr>
+<tr>
+<td><input type="submit" name="preenchimentoAbas:j_id624" value="Próxima seção" onclick="Richfaces.showModalPanel('modalProcessando');" class="botaoLargo"></td>
+</tr>
+<tr>
+<td><input type="submit" name="preenchimentoAbas:j_id629" value="Próxima seção" onclick="Richfaces.showModalPanel('modalProcessando');" class="botaoLargo"></td>
+</tr>
+</tbody>
+</table>
+
+
+				</fieldset></div></div><input type="hidden" name="javax.faces.ViewState" id="javax.faces.ViewState" value="j_id6" autocomplete="off">
+</form></div></div>
+						
+			<!-- Componente que exibe mensagem de espera durante processamento dos requests. --><div id="modalProcessando" style="display: none;"><input autocomplete="off" id="modalProcessandoOpenedState" name="modalProcessandoOpenedState" type="hidden"><div class="rich-modalpanel " id="modalProcessandoContainer" style="position: absolute; display: none; z-index: 100; background-color: inherit;"><div class="rich-mpnl-mask-div-opaque rich-mpnl-mask-div" id="modalProcessandoDiv" style="z-index: -1;"><button class="rich-mpnl-button" id="modalProcessandoFirstHref"></button></div><div class="rich-mpnl-panel"><div class="rich-mp-container" id="modalProcessandoCDiv" style="position: absolute; left: 0px; top: 0px; z-index: 9;"><div class="rich-mpnl-shadow" id="modalProcessandoShadowDiv"></div><div class=" rich-mpnl-content" id="modalProcessandoContentDiv"><table border="0" cellpadding="0" cellspacing="0" class="rich-mp-content-table" id="modalProcessandoContentTable" style="width: 1px;height: 1px;"><tbody><tr style="height: 99%"><td class="rich-mpnl-body" valign="top"><table>
+<tbody>
+<tr>
+<td> <!-- style="float:right" --></td>
+<td><img src="/img/loading.gif"></td>
+</tr>
+<tr>
+<td><span class="processando">Processando...</span></td>
+</tr>
+</tbody>
+</table>
+<span id="_viewRoot:status"><span id="_viewRoot:status.start" style="display: none"></span><script type="text/javascript">
+window.document.getElementById('_viewRoot:status.start').onstart=function(){Richfaces.showModalPanel('modalProcessando');};
+</script><span id="_viewRoot:status.stop"></span><script type="text/javascript">
+window.document.getElementById('_viewRoot:status.stop').onstop=function(){Richfaces.hideModalPanel('modalProcessando');};
+</script></span></td></tr></tbody></table></div></div></div><div class="rich-mpnl-mask-div rich-mpnl-mask-div-transparent" id="modalProcessandoCursorDiv" style="z-index: -200;"><button class="rich-mpnl-button" id="modalProcessandoLastHref"></button></div><script type="text/javascript">new ModalPanel('modalProcessando',
+				{
+					width: -1,
+					height: -1,
+
+					minWidth: -1,
+					minHeight: -1,
+
+					resizeable: false,
+					moveable: false,
+
+					left: "auto",
+					top: "auto",
+
+					zindex: 100,onresize: '',onmove: '',onshow: '',onhide: '',onbeforeshow: '',onbeforehide: '',
+					domElementAttachment: "",				
+					keepVisualState: false,
+					showWhenRendered: false,
+					selectBehavior: "disable",
+
+					autosized: true,
+					overlapEmbedObjects: false});</script></div><script type="text/javascript"></script></div>
+			
+			<!-- Componente de exibição de mensagens de validação ao salvar o formulário --><div id="pnlMessages" style="display: none;"><input autocomplete="off" id="pnlMessagesOpenedState" name="pnlMessagesOpenedState" type="hidden"><div class="rich-modalpanel " id="pnlMessagesContainer" style="position: absolute; display: none; z-index: 100; background-color: inherit;"><div class="rich-mpnl-mask-div-opaque rich-mpnl-mask-div" id="pnlMessagesDiv" style="z-index: -1;"><button class="rich-mpnl-button" id="pnlMessagesFirstHref"></button></div><div class="rich-mpnl-panel"><div class="rich-mp-container" id="pnlMessagesCDiv" style="position: absolute; left: 0px; top: 0px; z-index: 9;"><div class="rich-mpnl-shadow" id="pnlMessagesShadowDiv"></div><div class=" rich-mpnl-content" id="pnlMessagesContentDiv"><table border="0" cellpadding="0" cellspacing="0" class="rich-mp-content-table" id="pnlMessagesContentTable" style="width: 700px;height: 50px;"><tbody><tr style="height: 1%;"><td class="rich-mpnl-header-cell"><div class="rich-mpnl-text rich-mpnl-header " id="pnlMessagesHeader" style="white-space: nowrap; cursor: move;">Erros</div></td></tr><tr style="height: 99%"><td class="rich-mpnl-body" valign="top"><input id="erros" type="hidden" name="erros" value="">
+                
+                <br><br><br><br><br><br>
+                <center><input type="button" value="OK" class="botaoLargo" onclick="Richfaces.hideModalPanel('pnlMessages');"></center>  
+                <br></td></tr></tbody></table></div></div></div><div class="rich-mpnl-mask-div rich-mpnl-mask-div-transparent" id="pnlMessagesCursorDiv" style="z-index: -200;"><button class="rich-mpnl-button" id="pnlMessagesLastHref"></button></div><script type="text/javascript">new ModalPanel('pnlMessages',
+				{
+					width: -1,
+					height: -1,
+
+					minWidth: 700,
+					minHeight: 50,
+
+					resizeable: false,
+					moveable: true,
+
+					left: "auto",
+					top: "auto",
+
+					zindex: 100,onresize: '',onmove: '',onshow: '',onhide: '',onbeforeshow: '',onbeforehide: '',
+					domElementAttachment: "",				
+					keepVisualState: false,
+					showWhenRendered: false,
+					selectBehavior: "disable",
+
+					autosized: true,
+					overlapEmbedObjects: false});</script></div><script type="text/javascript"></script></div>
+			
+		</div>
+	
+<div id="ui-datepicker-div" class="ui-datepicker ui-widget ui-widget-content ui-helper-clearfix ui-corner-all"></div></body></html>
