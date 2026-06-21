@@ -5,7 +5,6 @@ import struct
 from itertools import chain, repeat
 from typing import Any
 
-import pyodbc
 from azure.identity import AzureCliCredential, ClientSecretCredential
 from sqlalchemy import Engine, create_engine, event, text
 
@@ -28,14 +27,17 @@ def _token_struct(credential: Any) -> bytes:
     return struct.pack("<i", len(encoded)) + encoded
 
 
-def get_engine() -> Engine:
-    host = os.getenv("FABRIC_WAREHOUSE_HOST")
-    db = os.getenv("FABRIC_WAREHOUSE_NAME")
+def get_engine(host: str, database: str) -> Engine:
+    """Cria um engine SQLAlchemy para um Warehouse Fabric específico.
 
+    Args:
+        host: host do Warehouse (ex.: "xxxx.datawarehouse.fabric.microsoft.com").
+        database: nome do Warehouse (ex.: "mp_silver").
+    """
     connection_string = (
         f"DRIVER={{ODBC Driver 18 for SQL Server}};"
         f"SERVER={host},1433;"
-        f"DATABASE={db};"
+        f"DATABASE={database};"
         f"Encrypt=Yes;TrustServerCertificate=No"
     )
 
@@ -52,10 +54,25 @@ def get_engine() -> Engine:
     return engine
 
 
-def check_connection() -> bool:
+def get_silver_engine() -> Engine:
+    """Engine para o Warehouse da camada silver (FABRIC_WAREHOUSE_SILVER_HOST/NAME)."""
+    return get_engine(
+        host=os.environ["FABRIC_WAREHOUSE_SILVER_HOST"],
+        database=os.environ["FABRIC_WAREHOUSE_SILVER_NAME"],
+    )
+
+
+def get_gold_engine() -> Engine:
+    """Engine para o Warehouse da camada gold (FABRIC_WAREHOUSE_GOLD_HOST/NAME)."""
+    return get_engine(
+        host=os.environ["FABRIC_WAREHOUSE_GOLD_HOST"],
+        database=os.environ["FABRIC_WAREHOUSE_GOLD_NAME"],
+    )
+
+
+def check_connection(engine: Engine) -> bool:
     """Verifica se a conexão com o Warehouse está funcional."""
     try:
-        engine = get_engine()
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
         return True

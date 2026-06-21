@@ -25,15 +25,29 @@ def get_client() -> DataLakeServiceClient:
     )
 
 
-def upload_file(local_path: Path, remote_path: str) -> None:
+def _bronze_ids() -> tuple[str, str]:
+    """Resolve workspace_id/lakehouse_id do Lakehouse mp_bronze."""
+    workspace_id = os.environ["FABRIC_WORKSPACE_ID"]
+    lakehouse_id = os.environ["FABRIC_LAKEHOUSE_ID"]
+    return workspace_id, lakehouse_id
+
+
+def upload_file(
+    local_path: Path,
+    remote_path: str,
+    workspace_id: str | None = None,
+    lakehouse_id: str | None = None,
+) -> None:
     """Envia arquivo para a seção Files do Lakehouse.
 
     Args:
         local_path: caminho local do arquivo.
         remote_path: caminho relativo dentro de Files, ex: "cnmp/pdfs/arquivo.pdf".
+        workspace_id: id do workspace; se omitido, resolve a camada bronze via env.
+        lakehouse_id: id do lakehouse; se omitido, resolve a camada bronze via env.
     """
-    workspace_id = os.getenv("FABRIC_WORKSPACE_ID")
-    lakehouse_id = os.getenv("FABRIC_LAKEHOUSE_ID")
+    if workspace_id is None or lakehouse_id is None:
+        workspace_id, lakehouse_id = _bronze_ids()
 
     client = get_client()
     fs = client.get_file_system_client(file_system=workspace_id)
@@ -44,10 +58,32 @@ def upload_file(local_path: Path, remote_path: str) -> None:
         file_client.upload_data(f, overwrite=True)
 
 
-def download_file(remote_path: str, local_path: Path) -> None:
+def upload_bytes(
+    data: bytes,
+    remote_path: str,
+    workspace_id: str | None = None,
+    lakehouse_id: str | None = None,
+) -> None:
+    """Envia bytes diretamente para a seção Files do Lakehouse, sem arquivo local intermediário."""
+    if workspace_id is None or lakehouse_id is None:
+        workspace_id, lakehouse_id = _bronze_ids()
+
+    client = get_client()
+    fs = client.get_file_system_client(file_system=workspace_id)
+    full_path = f"{lakehouse_id}/Files/{remote_path}"
+    file_client = fs.get_file_client(full_path)
+    file_client.upload_data(data, overwrite=True)
+
+
+def download_file(
+    remote_path: str,
+    local_path: Path,
+    workspace_id: str | None = None,
+    lakehouse_id: str | None = None,
+) -> None:
     """Baixa arquivo do Lakehouse para o disco local."""
-    workspace_id = os.getenv("FABRIC_WORKSPACE_ID")
-    lakehouse_id = os.getenv("FABRIC_LAKEHOUSE_ID")
+    if workspace_id is None or lakehouse_id is None:
+        workspace_id, lakehouse_id = _bronze_ids()
 
     client = get_client()
     fs = client.get_file_system_client(file_system=workspace_id)
