@@ -7,7 +7,26 @@ from azure.identity import AzureCliCredential, ClientSecretCredential
 from azure.storage.filedatalake import DataLakeServiceClient
 
 
-def _get_credential() -> AzureCliCredential | ClientSecretCredential:
+class _NotebookCredential:
+    """Credencial baseada na identidade nativa de um notebook Fabric (storage)."""
+
+    def get_token(self, *scopes: str, **kwargs: object) -> object:
+        from notebookutils import credentials as nb_credentials  # type: ignore[import-not-found]
+
+        token = nb_credentials.getToken("storage")
+        return type("Token", (), {"token": token, "expires_on": 0})()
+
+
+def _get_credential() -> "_NotebookCredential | AzureCliCredential | ClientSecretCredential":
+    """Identidade nativa do notebook Fabric quando disponível, senão Service
+    Principal/AzureCliCredential para uso local (scripts via uv run)."""
+    try:
+        import notebookutils  # noqa: F401
+
+        return _NotebookCredential()
+    except ImportError:
+        pass
+
     client_secret = os.getenv("CLIENT_SECRET")
     if client_secret:
         return ClientSecretCredential(

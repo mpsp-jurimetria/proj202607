@@ -9,7 +9,31 @@ from azure.identity import AzureCliCredential, ClientSecretCredential
 from sqlalchemy import Engine, create_engine, event, text
 
 
-def _get_credential() -> AzureCliCredential | ClientSecretCredential:
+class _NotebookCredential:
+    """Credencial baseada na identidade nativa de um notebook Fabric.
+
+    Usa notebookutils (disponível apenas dentro do runtime do Fabric) em vez de
+    Service Principal — não precisa de CLIENT_ID/CLIENT_SECRET.
+    """
+
+    def get_token(self, *scopes: str, **kwargs: Any) -> Any:
+        from notebookutils import credentials as nb_credentials  # type: ignore[import-not-found]
+
+        token = nb_credentials.getToken("https://database.windows.net/")
+        return type("Token", (), {"token": token})()
+
+
+def _get_credential() -> "_NotebookCredential | AzureCliCredential | ClientSecretCredential":
+    """Resolve a credencial: identidade nativa do notebook Fabric quando disponível
+    (notebookutils só existe dentro do runtime do Fabric), senão Service
+    Principal/AzureCliCredential para uso local (scripts via uv run)."""
+    try:
+        import notebookutils  # noqa: F401
+
+        return _NotebookCredential()
+    except ImportError:
+        pass
+
     client_secret = os.getenv("CLIENT_SECRET")
     if client_secret:
         return ClientSecretCredential(
@@ -27,12 +51,15 @@ def _token_struct(credential: Any) -> bytes:
     return struct.pack("<i", len(encoded)) + encoded
 
 
-def get_engine(host: str, database: str) -> Engine:
+def get_engine(host: str, database: str, credential: Any = None) -> Engine:
     """Cria um engine SQLAlchemy para um Warehouse Fabric específico.
 
     Args:
         host: host do Warehouse (ex.: "xxxx.datawarehouse.fabric.microsoft.com").
         database: nome do Warehouse (ex.: "mp_silver").
+        credential: credencial com método get_token(); por padrão usa Service
+            Principal/AzureCliCredential (_get_credential). Dentro de um notebook
+            Fabric, passe _NotebookCredential() para usar a identidade nativa.
     """
     connection_string = (
         f"DRIVER={{ODBC Driver 18 for SQL Server}};"
@@ -41,7 +68,7 @@ def get_engine(host: str, database: str) -> Engine:
         f"Encrypt=Yes;TrustServerCertificate=No"
     )
 
-    credential = _get_credential()
+    credential = credential or _get_credential()
     engine = create_engine(
         f"mssql+pyodbc:///?odbc_connect={connection_string}",
         echo=False,
