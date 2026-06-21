@@ -93,3 +93,39 @@ def download_file(
     local_path.parent.mkdir(parents=True, exist_ok=True)
     with open(local_path, "wb") as f:
         f.write(file_client.download_file().readall())
+
+
+def download_bytes(
+    remote_path: str,
+    workspace_id: str | None = None,
+    lakehouse_id: str | None = None,
+) -> bytes:
+    """Baixa o conteúdo de um arquivo do Lakehouse direto em memória."""
+    if workspace_id is None or lakehouse_id is None:
+        workspace_id, lakehouse_id = _bronze_ids()
+
+    client = get_client()
+    fs = client.get_file_system_client(file_system=workspace_id)
+    full_path = f"{lakehouse_id}/Files/{remote_path}"
+    file_client = fs.get_file_client(full_path)
+    return file_client.download_file().readall()
+
+
+def listar_arquivos(
+    prefixo: str,
+    workspace_id: str | None = None,
+    lakehouse_id: str | None = None,
+) -> list[str]:
+    """Lista caminhos (relativos a Files/) de todos os arquivos sob um prefixo."""
+    if workspace_id is None or lakehouse_id is None:
+        workspace_id, lakehouse_id = _bronze_ids()
+
+    client = get_client()
+    fs = client.get_file_system_client(file_system=workspace_id)
+    base = f"{lakehouse_id}/Files/{prefixo}"
+    prefix_len = len(f"{lakehouse_id}/Files/")
+    return [
+        path.name[prefix_len:]
+        for path in fs.get_paths(path=base)
+        if not path.is_directory
+    ]
