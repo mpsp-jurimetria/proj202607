@@ -7,3 +7,5 @@
 data-raw
 python/downloads/
 .env
+__pycache__/
+*.pyc
