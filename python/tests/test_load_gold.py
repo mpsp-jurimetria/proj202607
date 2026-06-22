@@ -41,5 +41,14 @@ def test_construir_pivot_radio_resolve_via_dim_campo_opcao():
 def test_construir_pivot_sem_campos_gera_tabela_so_com_colunas_base():
     ddl, insert = _construir_pivot(999, [])
 
-    assert "status_atual VARCHAR(100) NULL\n);" in ddl
+    assert "status_atual VARCHAR(100) NULL,\n    CONSTRAINT PK_fato_visita_999" in ddl
+    assert "NOT ENFORCED\n);" in ddl
     assert "SELECT v.instancia_id_api, v.entidade_id_api, v.ano, v.periodo, v.status_atual\n" in insert
+
+
+def test_construir_pivot_constraint_nao_imposta_compativel_com_fabric():
+    campos = [{"campo_id_api": 30133, "label": "1.1 Data:", "tipo_campo": "DATA"}]
+    ddl, _ = _construir_pivot(1322, campos)
+
+    assert "instancia_id_api INT NOT NULL" in ddl
+    assert "PRIMARY KEY NONCLUSTERED (instancia_id_api) NOT ENFORCED" in ddl

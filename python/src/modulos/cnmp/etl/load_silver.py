@@ -31,16 +31,20 @@ logging.getLogger("src.modulos.cnmp.etl").setLevel(logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+# Fabric Warehouse não aceita PRIMARY KEY inline na coluna (erro 24584); só
+# aceita como constraint de tabela NONCLUSTERED ... NOT ENFORCED (não é
+# imposta pelo motor — serve só de documentação/otimização de consulta).
 DDL_SILVER = """
 IF OBJECT_ID('dim_ambiente', 'U') IS NULL
 CREATE TABLE dim_ambiente (
-    ambiente_id_api INT PRIMARY KEY,
-    descricao       VARCHAR(200) NOT NULL
+    ambiente_id_api INT NOT NULL,
+    descricao       VARCHAR(200) NOT NULL,
+    CONSTRAINT PK_dim_ambiente PRIMARY KEY NONCLUSTERED (ambiente_id_api) NOT ENFORCED
 );
 
 IF OBJECT_ID('dim_formulario', 'U') IS NULL
 CREATE TABLE dim_formulario (
-    formulario_id_api INT PRIMARY KEY,
+    formulario_id_api INT NOT NULL,
     ambiente_id_api   INT NOT NULL,
     nome              VARCHAR(300) NOT NULL,
     periodicidade     VARCHAR(50) NULL,
@@ -48,7 +52,8 @@ CREATE TABLE dim_formulario (
     ano_inicio        INT NULL,
     periodo_inicio    INT NULL,
     ano_termino       INT NULL,
-    periodo_termino   INT NULL
+    periodo_termino   INT NULL,
+    CONSTRAINT PK_dim_formulario PRIMARY KEY NONCLUSTERED (formulario_id_api) NOT ENFORCED
 );
 
 IF OBJECT_ID('dim_formulario_tipo_entidade', 'U') IS NULL
@@ -56,20 +61,21 @@ CREATE TABLE dim_formulario_tipo_entidade (
     formulario_id_api    INT NOT NULL,
     tipo_entidade_id_api INT NOT NULL,
     descricao            VARCHAR(200) NOT NULL,
-    PRIMARY KEY (formulario_id_api, tipo_entidade_id_api)
+    CONSTRAINT PK_dim_formulario_tipo_entidade PRIMARY KEY NONCLUSTERED (formulario_id_api, tipo_entidade_id_api) NOT ENFORCED
 );
 
 IF OBJECT_ID('dim_secao', 'U') IS NULL
 CREATE TABLE dim_secao (
-    secao_id_api      INT PRIMARY KEY,
+    secao_id_api      INT NOT NULL,
     formulario_id_api INT NOT NULL,
     indice            INT NULL,
-    nome              VARCHAR(300) NOT NULL
+    nome              VARCHAR(300) NOT NULL,
+    CONSTRAINT PK_dim_secao PRIMARY KEY NONCLUSTERED (secao_id_api) NOT ENFORCED
 );
 
 IF OBJECT_ID('dim_campo', 'U') IS NULL
 CREATE TABLE dim_campo (
-    campo_id_api        INT PRIMARY KEY,
+    campo_id_api        INT NOT NULL,
     secao_id_api        INT NOT NULL,
     formulario_id_api   INT NOT NULL,
     parent_campo_id_api INT NULL,
@@ -79,7 +85,8 @@ CREATE TABLE dim_campo (
     obrigatorio         BIT NOT NULL DEFAULT 0,
     tamanho_maximo      INT NULL,
     tipo_campo          VARCHAR(50) NOT NULL,
-    is_tabela_dinamica  BIT NOT NULL DEFAULT 0
+    is_tabela_dinamica  BIT NOT NULL DEFAULT 0,
+    CONSTRAINT PK_dim_campo PRIMARY KEY NONCLUSTERED (campo_id_api) NOT ENFORCED
 );
 
 IF OBJECT_ID('dim_campo_opcao', 'U') IS NULL
@@ -87,7 +94,7 @@ CREATE TABLE dim_campo_opcao (
     campo_id_api INT NOT NULL,
     valor_api    VARCHAR(50) NOT NULL,
     descricao    VARCHAR(MAX) NOT NULL,
-    PRIMARY KEY (campo_id_api, valor_api)
+    CONSTRAINT PK_dim_campo_opcao PRIMARY KEY NONCLUSTERED (campo_id_api, valor_api) NOT ENFORCED
 );
 
 IF OBJECT_ID('dim_campo_dependencia', 'U') IS NULL
@@ -95,25 +102,27 @@ CREATE TABLE dim_campo_dependencia (
     campo_id_api            INT NOT NULL,
     campo_id_condicao_api    INT NOT NULL,
     valor_resposta_esperado VARCHAR(MAX) NOT NULL,
-    PRIMARY KEY (campo_id_api, campo_id_condicao_api)
+    CONSTRAINT PK_dim_campo_dependencia PRIMARY KEY NONCLUSTERED (campo_id_api, campo_id_condicao_api) NOT ENFORCED
 );
 
 IF OBJECT_ID('dim_entidade', 'U') IS NULL
 CREATE TABLE dim_entidade (
-    entidade_id_api INT PRIMARY KEY,
+    entidade_id_api INT NOT NULL,
     ambiente_id_api INT NOT NULL,
-    descricao       VARCHAR(300) NOT NULL
+    descricao       VARCHAR(300) NOT NULL,
+    CONSTRAINT PK_dim_entidade PRIMARY KEY NONCLUSTERED (entidade_id_api) NOT ENFORCED
 );
 
 IF OBJECT_ID('fato_instancia', 'U') IS NULL
 CREATE TABLE fato_instancia (
-    instancia_id_api  INT PRIMARY KEY,
+    instancia_id_api  INT NOT NULL,
     formulario_id_api INT NOT NULL,
     entidade_id_api   INT NOT NULL,
     ano               INT NULL,
     periodo           INT NULL,
     status_atual      VARCHAR(100) NULL,
-    data_carga        DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
+    data_carga        DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+    CONSTRAINT PK_fato_instancia PRIMARY KEY NONCLUSTERED (instancia_id_api) NOT ENFORCED
 );
 
 IF OBJECT_ID('fato_resposta', 'U') IS NULL
@@ -122,7 +131,7 @@ CREATE TABLE fato_resposta (
     campo_id_api     INT NOT NULL,
     linha            INT NOT NULL DEFAULT 1,
     valor_resposta   VARCHAR(MAX) NULL,
-    PRIMARY KEY (instancia_id_api, campo_id_api, linha)
+    CONSTRAINT PK_fato_resposta PRIMARY KEY NONCLUSTERED (instancia_id_api, campo_id_api, linha) NOT ENFORCED
 );
 """
 
