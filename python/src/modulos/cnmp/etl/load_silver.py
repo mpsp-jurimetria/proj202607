@@ -153,8 +153,10 @@ def recarregar_tabela(
             placeholders = ", ".join(f":{coluna}" for coluna in colunas)
             colunas_sql = ", ".join(colunas)
             insert_sql = text(f"INSERT INTO {tabela} ({colunas_sql}) VALUES ({placeholders})")
-            for inicio in range(0, len(linhas), tamanho_lote):
+            total_lotes = (len(linhas) + tamanho_lote - 1) // tamanho_lote
+            for indice_lote, inicio in enumerate(range(0, len(linhas), tamanho_lote), start=1):
                 conn.execute(insert_sql, linhas[inicio : inicio + tamanho_lote])
+                logger.info("%s: lote %d/%d inserido", tabela, indice_lote, total_lotes)
     logger.info("%s: %d linhas recarregadas", tabela, len(linhas))
 
 
