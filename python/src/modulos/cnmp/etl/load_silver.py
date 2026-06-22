@@ -136,17 +136,25 @@ def criar_schema(engine: Engine) -> None:
     logger.info("Schema silver criado/verificado")
 
 
-def recarregar_tabela(engine: Engine, tabela: str, colunas: list[str], linhas: list[dict]) -> None:
-    """Substitui todo o conteúdo de uma tabela silver pelas linhas informadas."""
+_TAMANHO_LOTE = 5000
+
+
+def recarregar_tabela(
+    engine: Engine, tabela: str, colunas: list[str], linhas: list[dict], tamanho_lote: int = _TAMANHO_LOTE
+) -> None:
+    """Substitui todo o conteúdo de uma tabela silver pelas linhas informadas.
+
+    Insere em lotes de `tamanho_lote` em vez de um único executemany gigante —
+    mais leve para tabelas com centenas de milhares de linhas (ex.: fato_resposta).
+    """
     with engine.begin() as conn:
         conn.execute(text(f"DELETE FROM {tabela}"))
         if linhas:
             placeholders = ", ".join(f":{coluna}" for coluna in colunas)
             colunas_sql = ", ".join(colunas)
-            conn.execute(
-                text(f"INSERT INTO {tabela} ({colunas_sql}) VALUES ({placeholders})"),
-                linhas,
-            )
+            insert_sql = text(f"INSERT INTO {tabela} ({colunas_sql}) VALUES ({placeholders})")
+            for inicio in range(0, len(linhas), tamanho_lote):
+                conn.execute(insert_sql, linhas[inicio : inicio + tamanho_lote])
     logger.info("%s: %d linhas recarregadas", tabela, len(linhas))
 
 

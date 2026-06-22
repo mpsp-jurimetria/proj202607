@@ -72,6 +72,11 @@ def get_engine(host: str, database: str, credential: Any = None) -> Engine:
     engine = create_engine(
         f"mssql+pyodbc:///?odbc_connect={connection_string}",
         echo=False,
+        # fast_executemany evita o erro "Cannot convert to text/ntext or
+        # collate to ..._UTF8" do pyodbc em INSERTs grandes com VARCHAR(MAX) —
+        # sem isso, o driver às vezes promove o bind de string para um tipo
+        # legado (text/ntext) incompatível com a collation UTF-8 do Fabric.
+        fast_executemany=True,
     )
 
     @event.listens_for(engine, "do_connect")
