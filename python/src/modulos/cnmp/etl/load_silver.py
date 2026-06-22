@@ -31,10 +31,11 @@ logging.getLogger("src.modulos.cnmp.etl").setLevel(logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-# Fabric Warehouse não aceita PRIMARY KEY de forma alguma no CREATE TABLE
-# (erro 24584), nem inline na coluna nem como constraint NONCLUSTERED ...
-# NOT ENFORCED. Por isso as tabelas não declaram chave primária — a carga
-# (DELETE + INSERT completo por tabela) não depende disso para funcionar.
+# Fabric Warehouse (esta edição) rejeita, no CREATE TABLE: PRIMARY KEY (erro
+# 24584, mesmo como NONCLUSTERED ... NOT ENFORCED) e DEFAULT. Por isso as
+# tabelas não declaram chave primária nem valor padrão — a carga (DELETE +
+# INSERT completo por tabela, sempre listando todas as colunas) não depende
+# de nenhum dos dois para funcionar.
 DDL_SILVER = """
 IF OBJECT_ID('dim_ambiente', 'U') IS NULL
 CREATE TABLE dim_ambiente (
@@ -79,10 +80,10 @@ CREATE TABLE dim_campo (
     label               VARCHAR(MAX) NOT NULL,
     indice              INT NULL,
     tabulacao           INT NULL,
-    obrigatorio         BIT NOT NULL DEFAULT 0,
+    obrigatorio         BIT NOT NULL,
     tamanho_maximo      INT NULL,
     tipo_campo          VARCHAR(50) NOT NULL,
-    is_tabela_dinamica  BIT NOT NULL DEFAULT 0
+    is_tabela_dinamica  BIT NOT NULL
 );
 
 IF OBJECT_ID('dim_campo_opcao', 'U') IS NULL
@@ -113,15 +114,14 @@ CREATE TABLE fato_instancia (
     entidade_id_api   INT NOT NULL,
     ano               INT NULL,
     periodo           INT NULL,
-    status_atual      VARCHAR(100) NULL,
-    data_carga        DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
+    status_atual      VARCHAR(100) NULL
 );
 
 IF OBJECT_ID('fato_resposta', 'U') IS NULL
 CREATE TABLE fato_resposta (
     instancia_id_api INT NOT NULL,
     campo_id_api     INT NOT NULL,
-    linha            INT NOT NULL DEFAULT 1,
+    linha            INT NOT NULL,
     valor_resposta   VARCHAR(MAX) NULL
 );
 """

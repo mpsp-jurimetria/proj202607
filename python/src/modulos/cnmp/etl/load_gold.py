@@ -37,9 +37,9 @@ logging.getLogger("src.modulos.cnmp.etl").setLevel(logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-# Fabric Warehouse não aceita PRIMARY KEY de forma alguma no CREATE TABLE
-# (erro 24584), nem inline nem como constraint NONCLUSTERED ... NOT ENFORCED.
-# Por isso as tabelas não declaram chave primária.
+# Fabric Warehouse (esta edição) rejeita, no CREATE TABLE: PRIMARY KEY (erro
+# 24584, mesmo como NONCLUSTERED ... NOT ENFORCED) e DEFAULT. Por isso as
+# tabelas não declaram chave primária nem valor padrão.
 DDL_GOLD = """
 IF OBJECT_ID('dim_unidade', 'U') IS NULL
 CREATE TABLE dim_unidade (
@@ -66,7 +66,7 @@ CREATE TABLE dim_campo (
     label               VARCHAR(MAX) NOT NULL,
     indice              INT NULL,
     tipo_campo          VARCHAR(50) NOT NULL,
-    is_tabela_dinamica  BIT NOT NULL DEFAULT 0
+    is_tabela_dinamica  BIT NOT NULL
 );
 
 IF OBJECT_ID('dim_campo_opcao', 'U') IS NULL
@@ -90,7 +90,7 @@ IF OBJECT_ID('fato_resposta_tipada', 'U') IS NULL
 CREATE TABLE fato_resposta_tipada (
     instancia_id_api INT NOT NULL,
     campo_id_api     INT NOT NULL,
-    linha            INT NOT NULL DEFAULT 1,
+    linha            INT NOT NULL,
     valor_texto      VARCHAR(MAX) NULL,
     valor_numero     DECIMAL(18, 2) NULL,
     valor_data       DATE NULL,
