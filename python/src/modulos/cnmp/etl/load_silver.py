@@ -31,15 +31,15 @@ logging.getLogger("src.modulos.cnmp.etl").setLevel(logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-# Fabric Warehouse não aceita PRIMARY KEY inline na coluna (erro 24584); só
-# aceita como constraint de tabela NONCLUSTERED ... NOT ENFORCED (não é
-# imposta pelo motor — serve só de documentação/otimização de consulta).
+# Fabric Warehouse não aceita PRIMARY KEY de forma alguma no CREATE TABLE
+# (erro 24584), nem inline na coluna nem como constraint NONCLUSTERED ...
+# NOT ENFORCED. Por isso as tabelas não declaram chave primária — a carga
+# (DELETE + INSERT completo por tabela) não depende disso para funcionar.
 DDL_SILVER = """
 IF OBJECT_ID('dim_ambiente', 'U') IS NULL
 CREATE TABLE dim_ambiente (
     ambiente_id_api INT NOT NULL,
-    descricao       VARCHAR(200) NOT NULL,
-    CONSTRAINT PK_dim_ambiente PRIMARY KEY NONCLUSTERED (ambiente_id_api) NOT ENFORCED
+    descricao       VARCHAR(200) NOT NULL
 );
 
 IF OBJECT_ID('dim_formulario', 'U') IS NULL
@@ -52,16 +52,14 @@ CREATE TABLE dim_formulario (
     ano_inicio        INT NULL,
     periodo_inicio    INT NULL,
     ano_termino       INT NULL,
-    periodo_termino   INT NULL,
-    CONSTRAINT PK_dim_formulario PRIMARY KEY NONCLUSTERED (formulario_id_api) NOT ENFORCED
+    periodo_termino   INT NULL
 );
 
 IF OBJECT_ID('dim_formulario_tipo_entidade', 'U') IS NULL
 CREATE TABLE dim_formulario_tipo_entidade (
     formulario_id_api    INT NOT NULL,
     tipo_entidade_id_api INT NOT NULL,
-    descricao            VARCHAR(200) NOT NULL,
-    CONSTRAINT PK_dim_formulario_tipo_entidade PRIMARY KEY NONCLUSTERED (formulario_id_api, tipo_entidade_id_api) NOT ENFORCED
+    descricao            VARCHAR(200) NOT NULL
 );
 
 IF OBJECT_ID('dim_secao', 'U') IS NULL
@@ -69,8 +67,7 @@ CREATE TABLE dim_secao (
     secao_id_api      INT NOT NULL,
     formulario_id_api INT NOT NULL,
     indice            INT NULL,
-    nome              VARCHAR(300) NOT NULL,
-    CONSTRAINT PK_dim_secao PRIMARY KEY NONCLUSTERED (secao_id_api) NOT ENFORCED
+    nome              VARCHAR(300) NOT NULL
 );
 
 IF OBJECT_ID('dim_campo', 'U') IS NULL
@@ -85,32 +82,28 @@ CREATE TABLE dim_campo (
     obrigatorio         BIT NOT NULL DEFAULT 0,
     tamanho_maximo      INT NULL,
     tipo_campo          VARCHAR(50) NOT NULL,
-    is_tabela_dinamica  BIT NOT NULL DEFAULT 0,
-    CONSTRAINT PK_dim_campo PRIMARY KEY NONCLUSTERED (campo_id_api) NOT ENFORCED
+    is_tabela_dinamica  BIT NOT NULL DEFAULT 0
 );
 
 IF OBJECT_ID('dim_campo_opcao', 'U') IS NULL
 CREATE TABLE dim_campo_opcao (
     campo_id_api INT NOT NULL,
     valor_api    VARCHAR(50) NOT NULL,
-    descricao    VARCHAR(MAX) NOT NULL,
-    CONSTRAINT PK_dim_campo_opcao PRIMARY KEY NONCLUSTERED (campo_id_api, valor_api) NOT ENFORCED
+    descricao    VARCHAR(MAX) NOT NULL
 );
 
 IF OBJECT_ID('dim_campo_dependencia', 'U') IS NULL
 CREATE TABLE dim_campo_dependencia (
     campo_id_api            INT NOT NULL,
     campo_id_condicao_api    INT NOT NULL,
-    valor_resposta_esperado VARCHAR(MAX) NOT NULL,
-    CONSTRAINT PK_dim_campo_dependencia PRIMARY KEY NONCLUSTERED (campo_id_api, campo_id_condicao_api) NOT ENFORCED
+    valor_resposta_esperado VARCHAR(MAX) NOT NULL
 );
 
 IF OBJECT_ID('dim_entidade', 'U') IS NULL
 CREATE TABLE dim_entidade (
     entidade_id_api INT NOT NULL,
     ambiente_id_api INT NOT NULL,
-    descricao       VARCHAR(300) NOT NULL,
-    CONSTRAINT PK_dim_entidade PRIMARY KEY NONCLUSTERED (entidade_id_api) NOT ENFORCED
+    descricao       VARCHAR(300) NOT NULL
 );
 
 IF OBJECT_ID('fato_instancia', 'U') IS NULL
@@ -121,8 +114,7 @@ CREATE TABLE fato_instancia (
     ano               INT NULL,
     periodo           INT NULL,
     status_atual      VARCHAR(100) NULL,
-    data_carga        DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
-    CONSTRAINT PK_fato_instancia PRIMARY KEY NONCLUSTERED (instancia_id_api) NOT ENFORCED
+    data_carga        DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
 );
 
 IF OBJECT_ID('fato_resposta', 'U') IS NULL
@@ -130,8 +122,7 @@ CREATE TABLE fato_resposta (
     instancia_id_api INT NOT NULL,
     campo_id_api     INT NOT NULL,
     linha            INT NOT NULL DEFAULT 1,
-    valor_resposta   VARCHAR(MAX) NULL,
-    CONSTRAINT PK_fato_resposta PRIMARY KEY NONCLUSTERED (instancia_id_api, campo_id_api, linha) NOT ENFORCED
+    valor_resposta   VARCHAR(MAX) NULL
 );
 """
 

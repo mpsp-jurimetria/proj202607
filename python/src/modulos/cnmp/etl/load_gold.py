@@ -37,15 +37,15 @@ logging.getLogger("src.modulos.cnmp.etl").setLevel(logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-# Fabric Warehouse não aceita PRIMARY KEY inline na coluna (erro 24584); só
-# aceita como constraint de tabela NONCLUSTERED ... NOT ENFORCED.
+# Fabric Warehouse não aceita PRIMARY KEY de forma alguma no CREATE TABLE
+# (erro 24584), nem inline nem como constraint NONCLUSTERED ... NOT ENFORCED.
+# Por isso as tabelas não declaram chave primária.
 DDL_GOLD = """
 IF OBJECT_ID('dim_unidade', 'U') IS NULL
 CREATE TABLE dim_unidade (
     entidade_id_api INT NOT NULL,
     ambiente_id_api INT NOT NULL,
-    descricao       VARCHAR(300) NOT NULL,
-    CONSTRAINT PK_dim_unidade PRIMARY KEY NONCLUSTERED (entidade_id_api) NOT ENFORCED
+    descricao       VARCHAR(300) NOT NULL
 );
 
 IF OBJECT_ID('dim_formulario', 'U') IS NULL
@@ -54,8 +54,7 @@ CREATE TABLE dim_formulario (
     ambiente_id_api   INT NOT NULL,
     nome              VARCHAR(300) NOT NULL,
     periodicidade     VARCHAR(50) NULL,
-    versao            INT NULL,
-    CONSTRAINT PK_dim_formulario PRIMARY KEY NONCLUSTERED (formulario_id_api) NOT ENFORCED
+    versao            INT NULL
 );
 
 IF OBJECT_ID('dim_campo', 'U') IS NULL
@@ -67,16 +66,14 @@ CREATE TABLE dim_campo (
     label               VARCHAR(MAX) NOT NULL,
     indice              INT NULL,
     tipo_campo          VARCHAR(50) NOT NULL,
-    is_tabela_dinamica  BIT NOT NULL DEFAULT 0,
-    CONSTRAINT PK_dim_campo PRIMARY KEY NONCLUSTERED (campo_id_api) NOT ENFORCED
+    is_tabela_dinamica  BIT NOT NULL DEFAULT 0
 );
 
 IF OBJECT_ID('dim_campo_opcao', 'U') IS NULL
 CREATE TABLE dim_campo_opcao (
     campo_id_api INT NOT NULL,
     valor_api    VARCHAR(50) NOT NULL,
-    descricao    VARCHAR(MAX) NOT NULL,
-    CONSTRAINT PK_dim_campo_opcao PRIMARY KEY NONCLUSTERED (campo_id_api, valor_api) NOT ENFORCED
+    descricao    VARCHAR(MAX) NOT NULL
 );
 
 IF OBJECT_ID('fato_visita', 'U') IS NULL
@@ -86,8 +83,7 @@ CREATE TABLE fato_visita (
     entidade_id_api   INT NOT NULL,
     ano               INT NULL,
     periodo           INT NULL,
-    status_atual      VARCHAR(100) NULL,
-    CONSTRAINT PK_fato_visita PRIMARY KEY NONCLUSTERED (instancia_id_api) NOT ENFORCED
+    status_atual      VARCHAR(100) NULL
 );
 
 IF OBJECT_ID('fato_resposta_tipada', 'U') IS NULL
@@ -98,8 +94,7 @@ CREATE TABLE fato_resposta_tipada (
     valor_texto      VARCHAR(MAX) NULL,
     valor_numero     DECIMAL(18, 2) NULL,
     valor_data       DATE NULL,
-    valor_booleano   BIT NULL,
-    CONSTRAINT PK_fato_resposta_tipada PRIMARY KEY NONCLUSTERED (instancia_id_api, campo_id_api, linha) NOT ENFORCED
+    valor_booleano   BIT NULL
 );
 """
 
@@ -276,7 +271,6 @@ def _construir_pivot(formulario_id: int, campos: list[dict]) -> tuple[str, str]:
         "    periodo INT NULL,\n"
         "    status_atual VARCHAR(100) NULL"
         + (",\n" + ",\n".join(colunas_ddl) if colunas_ddl else "")
-        + f",\n    CONSTRAINT PK_{nome_tabela} PRIMARY KEY NONCLUSTERED (instancia_id_api) NOT ENFORCED"
         + "\n);"
     )
 
