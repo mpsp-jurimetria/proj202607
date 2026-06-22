@@ -1,19 +1,23 @@
 """Camada gold: lê o silver (Warehouse mp_silver) via cross-database query e
-recarrega um modelo dimensional simplificado no Warehouse mp_gold, pronto para
-o modelo semântico do Power BI.
+recarrega um modelo dimensional + tabelas largas por formulário no Warehouse
+mp_gold, prontas para o modelo semântico do Power BI.
 
 Pré-requisito: mp_silver e mp_gold precisam estar no mesmo workspace Fabric —
 cross-database query (nome de três partes, ex.: mp_silver.dbo.dim_entidade)
 só funciona dentro do mesmo workspace.
 
-Diferente do silver, aqui a transformação inteira roda em SQL (sem reler os
-dados em Python), já que tanto a leitura quanto a escrita são no Warehouse.
-
-Tipagem de fato_resposta_tipada: valor_resposta (texto) é convertido para
-número/data/booleano conforme dim_campo.tipo_campo; campos que não se encaixam
-em nenhum desses tipos (TEXTO, RADIO, COMBO_BOX, CPF, CHECKBOX) ficam só em
-valor_texto — resolver RADIO/COMBO_BOX para a descrição da opção é trabalho do
-modelo semântico (join com dim_campo_opcao), não desta camada.
+Duas partes:
+1. Tabelas base (dim_unidade, dim_formulario, dim_campo, dim_campo_opcao,
+   fato_visita, fato_resposta_tipada) — cópia tipada do silver, em SQL puro,
+   sem reler dados em Python. Útil para consultas ad hoc e para os campos de
+   TABELA_DINAMICA, que não entram nas tabelas largas (linhas repetidas não
+   cabem numa coluna fixa).
+2. Uma tabela larga por formulário (`fato_visita_{formulario_id}`), uma coluna
+   por campo escalar (exclui TABELA_DINAMICA e seus filhos, LABEL e
+   CAMPO_ANEXO), com o valor já tipado e RADIO/COMBO_BOX resolvido para a
+   descrição da opção — pronta para abrir no Power BI sem precisar conhecer
+   idCampo. Construída dinamicamente em Python a partir de dim_campo, porque
+   cada formulário tem um conjunto de campos diferente (92 a ~900).
 
 Execute:
     uv run python -m src.modulos.cnmp.etl.load_gold
@@ -21,6 +25,8 @@ Execute:
 
 import logging
 import os
+import re
+import unicodedata
 
 from sqlalchemy import Engine, text
 
@@ -50,12 +56,14 @@ CREATE TABLE dim_formulario (
 
 IF OBJECT_ID('dim_campo', 'U') IS NULL
 CREATE TABLE dim_campo (
-    campo_id_api       INT PRIMARY KEY,
-    formulario_id_api  INT NOT NULL,
-    secao_id_api       INT NOT NULL,
-    label              VARCHAR(MAX) NOT NULL,
-    tipo_campo         VARCHAR(50) NOT NULL,
-    is_tabela_dinamica BIT NOT NULL DEFAULT 0
+    campo_id_api        INT PRIMARY KEY,
+    formulario_id_api   INT NOT NULL,
+    secao_id_api        INT NOT NULL,
+    parent_campo_id_api INT NULL,
+    label               VARCHAR(MAX) NOT NULL,
+    indice              INT NULL,
+    tipo_campo          VARCHAR(50) NOT NULL,
+    is_tabela_dinamica  BIT NOT NULL DEFAULT 0
 );
 
 IF OBJECT_ID('dim_campo_opcao', 'U') IS NULL
@@ -89,6 +97,33 @@ CREATE TABLE fato_resposta_tipada (
 );
 """
 
+# Tipos de campo que não geram coluna nas tabelas largas: LABEL é texto
+# estático do formulário (não é resposta) e CAMPO_ANEXO referencia um arquivo,
+# não um valor escalar.
+_TIPOS_SEM_COLUNA = {"LABEL", "CAMPO_ANEXO"}
+
+_TIPO_SQL_POR_CAMPO = {
+    "DATA": "DATE",
+    "SOMENTE_NUMERO": "DECIMAL(18, 2)",
+    "SIM_NAO": "BIT",
+}
+
+
+def _slug(label: str, max_len: int = 40) -> str:
+    """Reduz o label do campo a um identificador SQL legível.
+
+    Ex.: '13.11.2 Cocaína:' -> 'cocaina'. Não precisa ser único por si só —
+    quem garante unicidade da coluna é o prefixo com campo_id_api.
+    """
+    texto = re.sub(r"^[\d.]+\s*", "", label)
+    texto = unicodedata.normalize("NFKD", texto).encode("ascii", "ignore").decode("ascii")
+    texto = re.sub(r"[^a-zA-Z0-9]+", "_", texto).strip("_").lower()
+    return texto[:max_len].strip("_") or "campo"
+
+
+def _nome_coluna(campo_id_api: int, label: str) -> str:
+    return f"c{campo_id_api}_{_slug(label)}"
+
 
 def criar_schema(engine: Engine) -> None:
     with engine.begin() as conn:
@@ -96,13 +131,11 @@ def criar_schema(engine: Engine) -> None:
             statement = statement.strip()
             if statement:
                 conn.execute(text(statement))
-    logger.info("Schema gold criado/verificado")
+    logger.info("Schema gold (tabelas base) criado/verificado")
 
 
-def carregar_gold(engine: Engine) -> None:
-    """Recarrega o gold inteiro a partir do silver via cross-database query."""
+def _recarregar_tabelas_base(engine: Engine) -> None:
     silver_db = os.environ["FABRIC_WAREHOUSE_SILVER_NAME"]
-    criar_schema(engine)
 
     comandos = [
         ("dim_unidade", f"""
@@ -119,8 +152,9 @@ def carregar_gold(engine: Engine) -> None:
         """),
         ("dim_campo", f"""
             DELETE FROM dim_campo;
-            INSERT INTO dim_campo (campo_id_api, formulario_id_api, secao_id_api, label, tipo_campo, is_tabela_dinamica)
-            SELECT campo_id_api, formulario_id_api, secao_id_api, label, tipo_campo, is_tabela_dinamica
+            INSERT INTO dim_campo
+                (campo_id_api, formulario_id_api, secao_id_api, parent_campo_id_api, label, indice, tipo_campo, is_tabela_dinamica)
+            SELECT campo_id_api, formulario_id_api, secao_id_api, parent_campo_id_api, label, indice, tipo_campo, is_tabela_dinamica
             FROM {silver_db}.dbo.dim_campo;
         """),
         ("dim_campo_opcao", f"""
@@ -163,6 +197,121 @@ def carregar_gold(engine: Engine) -> None:
                     conn.execute(text(statement))
             logger.info("%s recarregada", tabela)
 
+
+def _campos_pivotaveis(conn, formulario_id: int) -> list[dict]:
+    """Campos escalares do formulário, na ordem do questionário.
+
+    Exclui o container de TABELA_DINAMICA (is_tabela_dinamica=1), as colunas
+    dele (parent_campo_id_api IS NOT NULL) e os tipos sem valor de resposta.
+    """
+    placeholders = ", ".join(f"'{tipo}'" for tipo in _TIPOS_SEM_COLUNA)
+    linhas = conn.execute(
+        text(f"""
+            SELECT campo_id_api, label, tipo_campo
+            FROM dim_campo
+            WHERE formulario_id_api = :formulario_id
+              AND is_tabela_dinamica = 0
+              AND parent_campo_id_api IS NULL
+              AND tipo_campo NOT IN ({placeholders})
+            ORDER BY indice
+        """),
+        {"formulario_id": formulario_id},
+    ).mappings().all()
+    return [dict(linha) for linha in linhas]
+
+
+def _construir_pivot(formulario_id: int, campos: list[dict]) -> tuple[str, str]:
+    """Monta o DDL e o INSERT...SELECT da tabela larga de um formulário."""
+    nome_tabela = f"fato_visita_{formulario_id}"
+
+    colunas_ddl = []
+    colunas_select = []
+    joins = []
+
+    for campo in campos:
+        campo_id = campo["campo_id_api"]
+        tipo_campo = campo["tipo_campo"]
+        nome_coluna = _nome_coluna(campo_id, campo["label"])
+        tipo_sql = _TIPO_SQL_POR_CAMPO.get(tipo_campo, "VARCHAR(MAX)")
+        colunas_ddl.append(f"    {nome_coluna} {tipo_sql} NULL")
+
+        alias_resp = f"r{campo_id}"
+        joins.append(
+            f"LEFT JOIN fato_resposta_tipada {alias_resp} "
+            f"ON {alias_resp}.instancia_id_api = v.instancia_id_api "
+            f"AND {alias_resp}.campo_id_api = {campo_id} AND {alias_resp}.linha = 1"
+        )
+
+        if tipo_campo in ("RADIO", "COMBO_BOX"):
+            alias_opt = f"o{campo_id}"
+            joins.append(
+                f"LEFT JOIN dim_campo_opcao {alias_opt} "
+                f"ON {alias_opt}.campo_id_api = {campo_id} "
+                f"AND {alias_opt}.valor_api = {alias_resp}.valor_texto"
+            )
+            valor_expr = f"COALESCE({alias_opt}.descricao, {alias_resp}.valor_texto)"
+        elif tipo_campo == "DATA":
+            valor_expr = f"{alias_resp}.valor_data"
+        elif tipo_campo == "SOMENTE_NUMERO":
+            valor_expr = f"{alias_resp}.valor_numero"
+        elif tipo_campo == "SIM_NAO":
+            valor_expr = f"{alias_resp}.valor_booleano"
+        else:
+            valor_expr = f"{alias_resp}.valor_texto"
+
+        colunas_select.append(f"    {valor_expr} AS {nome_coluna}")
+
+    ddl = (
+        f"DROP TABLE IF EXISTS {nome_tabela};\n"
+        f"CREATE TABLE {nome_tabela} (\n"
+        "    instancia_id_api INT PRIMARY KEY,\n"
+        "    entidade_id_api INT NOT NULL,\n"
+        "    ano INT NULL,\n"
+        "    periodo INT NULL,\n"
+        "    status_atual VARCHAR(100) NULL"
+        + (",\n" + ",\n".join(colunas_ddl) if colunas_ddl else "")
+        + "\n);"
+    )
+
+    nomes_colunas = ", ".join(_nome_coluna(c["campo_id_api"], c["label"]) for c in campos)
+    insert = (
+        f"INSERT INTO {nome_tabela} "
+        f"(instancia_id_api, entidade_id_api, ano, periodo, status_atual"
+        + (f", {nomes_colunas}" if campos else "")
+        + ")\n"
+        "SELECT v.instancia_id_api, v.entidade_id_api, v.ano, v.periodo, v.status_atual"
+        + (",\n" + ",\n".join(colunas_select) if colunas_select else "")
+        + "\nFROM fato_visita v\n"
+        + "\n".join(joins)
+        + f"\nWHERE v.formulario_id_api = {formulario_id};"
+    )
+
+    return ddl, insert
+
+
+def _recarregar_tabelas_pivotadas(engine: Engine) -> None:
+    with engine.begin() as conn:
+        formularios = [
+            row[0]
+            for row in conn.execute(text("SELECT formulario_id_api FROM dim_formulario")).all()
+        ]
+
+        for formulario_id in formularios:
+            campos = _campos_pivotaveis(conn, formulario_id)
+            ddl, insert = _construir_pivot(formulario_id, campos)
+            conn.execute(text(ddl))
+            conn.execute(text(insert))
+            logger.info(
+                "fato_visita_%s recarregada (%d colunas de campo)", formulario_id, len(campos)
+            )
+
+
+def carregar_gold(engine: Engine) -> None:
+    """Recarrega o gold inteiro: tabelas base a partir do silver, depois as
+    tabelas largas por formulário a partir das tabelas base já recarregadas."""
+    criar_schema(engine)
+    _recarregar_tabelas_base(engine)
+    _recarregar_tabelas_pivotadas(engine)
     logger.info("Carga gold concluída")
 
 
