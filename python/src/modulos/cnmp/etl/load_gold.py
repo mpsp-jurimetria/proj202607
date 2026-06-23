@@ -221,46 +221,60 @@ def _campos_pivotaveis(conn, formulario_id: int) -> list[dict]:
     return [dict(linha) for linha in linhas]
 
 
-def _construir_pivot(formulario_id: int, campos: list[dict]) -> tuple[str, str]:
-    """Monta o DDL e o INSERT...SELECT da tabela larga de um formulário."""
+# Colunas por lote de UPDATE ao preencher a tabela larga. Uma query com
+# muitos LEFT JOINs (um por coluna) pode passar do limite do otimizador do
+# SQL Server ("query processor ran out of stack space", erro 8621) em
+# formulários grandes (ex.: 900+ campos) — confirmado em produção: 350
+# colunas numa query só funcionou, ~600+ não. Preencher em lotes menores
+# evita isso, ao custo de várias passadas em vez de uma.
+_COLUNAS_POR_LOTE = 40
+
+
+def _campo_para_join(campo: dict) -> tuple[str, str, list[str]]:
+    """Para um campo, devolve (nome_coluna, expressão de valor, joins extras)."""
+    campo_id = campo["campo_id_api"]
+    tipo_campo = campo["tipo_campo"]
+    nome_coluna = _nome_coluna(campo_id, campo["label"])
+    alias_resp = f"r{campo_id}"
+
+    joins = [
+        f"LEFT JOIN fato_resposta_tipada {alias_resp} "
+        f"ON {alias_resp}.instancia_id_api = t.instancia_id_api "
+        f"AND {alias_resp}.campo_id_api = {campo_id} AND {alias_resp}.linha = 1"
+    ]
+
+    if tipo_campo in ("RADIO", "COMBO_BOX"):
+        alias_opt = f"o{campo_id}"
+        joins.append(
+            f"LEFT JOIN dim_campo_opcao {alias_opt} "
+            f"ON {alias_opt}.campo_id_api = {campo_id} "
+            f"AND {alias_opt}.valor_api = {alias_resp}.valor_texto"
+        )
+        valor_expr = f"COALESCE({alias_opt}.descricao, {alias_resp}.valor_texto)"
+    elif tipo_campo == "DATA":
+        valor_expr = f"{alias_resp}.valor_data"
+    elif tipo_campo == "SOMENTE_NUMERO":
+        valor_expr = f"{alias_resp}.valor_numero"
+    elif tipo_campo == "SIM_NAO":
+        valor_expr = f"{alias_resp}.valor_booleano"
+    else:
+        valor_expr = f"{alias_resp}.valor_texto"
+
+    return nome_coluna, valor_expr, joins
+
+
+def _construir_pivot(
+    formulario_id: int, campos: list[dict], colunas_por_lote: int = _COLUNAS_POR_LOTE
+) -> tuple[str, str, list[str]]:
+    """Monta o DDL, o INSERT (só colunas base) e os UPDATEs em lote da tabela
+    larga de um formulário."""
     nome_tabela = f"fato_visita_{formulario_id}"
 
-    colunas_ddl = []
-    colunas_select = []
-    joins = []
-
-    for campo in campos:
-        campo_id = campo["campo_id_api"]
-        tipo_campo = campo["tipo_campo"]
-        nome_coluna = _nome_coluna(campo_id, campo["label"])
-        tipo_sql = _TIPO_SQL_POR_CAMPO.get(tipo_campo, "VARCHAR(MAX)")
-        colunas_ddl.append(f"    {nome_coluna} {tipo_sql} NULL")
-
-        alias_resp = f"r{campo_id}"
-        joins.append(
-            f"LEFT JOIN fato_resposta_tipada {alias_resp} "
-            f"ON {alias_resp}.instancia_id_api = v.instancia_id_api "
-            f"AND {alias_resp}.campo_id_api = {campo_id} AND {alias_resp}.linha = 1"
-        )
-
-        if tipo_campo in ("RADIO", "COMBO_BOX"):
-            alias_opt = f"o{campo_id}"
-            joins.append(
-                f"LEFT JOIN dim_campo_opcao {alias_opt} "
-                f"ON {alias_opt}.campo_id_api = {campo_id} "
-                f"AND {alias_opt}.valor_api = {alias_resp}.valor_texto"
-            )
-            valor_expr = f"COALESCE({alias_opt}.descricao, {alias_resp}.valor_texto)"
-        elif tipo_campo == "DATA":
-            valor_expr = f"{alias_resp}.valor_data"
-        elif tipo_campo == "SOMENTE_NUMERO":
-            valor_expr = f"{alias_resp}.valor_numero"
-        elif tipo_campo == "SIM_NAO":
-            valor_expr = f"{alias_resp}.valor_booleano"
-        else:
-            valor_expr = f"{alias_resp}.valor_texto"
-
-        colunas_select.append(f"    {valor_expr} AS {nome_coluna}")
+    colunas_ddl = [
+        f"    {_nome_coluna(c['campo_id_api'], c['label'])} "
+        f"{_TIPO_SQL_POR_CAMPO.get(c['tipo_campo'], 'VARCHAR(MAX)')} NULL"
+        for c in campos
+    ]
 
     ddl = (
         f"DROP TABLE IF EXISTS {nome_tabela};\n"
@@ -274,20 +288,32 @@ def _construir_pivot(formulario_id: int, campos: list[dict]) -> tuple[str, str]:
         + "\n);"
     )
 
-    nomes_colunas = ", ".join(_nome_coluna(c["campo_id_api"], c["label"]) for c in campos)
-    insert = (
-        f"INSERT INTO {nome_tabela} "
-        f"(instancia_id_api, entidade_id_api, ano, periodo, status_atual"
-        + (f", {nomes_colunas}" if campos else "")
-        + ")\n"
-        "SELECT v.instancia_id_api, v.entidade_id_api, v.ano, v.periodo, v.status_atual"
-        + (",\n" + ",\n".join(colunas_select) if colunas_select else "")
-        + "\nFROM fato_visita v\n"
-        + "\n".join(joins)
-        + f"\nWHERE v.formulario_id_api = {formulario_id};"
+    insert_base = (
+        f"INSERT INTO {nome_tabela} (instancia_id_api, entidade_id_api, ano, periodo, status_atual)\n"
+        "SELECT instancia_id_api, entidade_id_api, ano, periodo, status_atual\n"
+        f"FROM fato_visita\nWHERE formulario_id_api = {formulario_id};"
     )
 
-    return ddl, insert
+    updates = []
+    for inicio in range(0, len(campos), colunas_por_lote):
+        lote = campos[inicio : inicio + colunas_por_lote]
+        sets = []
+        joins: list[str] = []
+        for campo in lote:
+            nome_coluna, valor_expr, joins_campo = _campo_para_join(campo)
+            sets.append(f"    t.{nome_coluna} = {valor_expr}")
+            joins.extend(joins_campo)
+
+        update = (
+            f"UPDATE t SET\n"
+            + ",\n".join(sets)
+            + f"\nFROM {nome_tabela} t\n"
+            + "\n".join(joins)
+            + ";"
+        )
+        updates.append(update)
+
+    return ddl, insert_base, updates
 
 
 def _recarregar_tabelas_pivotadas(engine: Engine) -> None:
@@ -299,9 +325,15 @@ def _recarregar_tabelas_pivotadas(engine: Engine) -> None:
 
         for formulario_id in formularios:
             campos = _campos_pivotaveis(conn, formulario_id)
-            ddl, insert = _construir_pivot(formulario_id, campos)
+            ddl, insert_base, updates = _construir_pivot(formulario_id, campos)
             conn.execute(text(ddl))
-            conn.execute(text(insert))
+            conn.execute(text(insert_base))
+            for indice_lote, update in enumerate(updates, start=1):
+                conn.execute(text(update))
+                logger.info(
+                    "fato_visita_%s: lote %d/%d de colunas preenchido",
+                    formulario_id, indice_lote, len(updates),
+                )
             logger.info(
                 "fato_visita_%s recarregada (%d colunas de campo)", formulario_id, len(campos)
             )
