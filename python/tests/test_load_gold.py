@@ -1,4 +1,10 @@
-from src.modulos.cnmp.etl.load_gold import _construir_pivot, _nome_coluna, _slug
+from src.modulos.cnmp.etl.load_gold import (
+    _construir_pivot,
+    _construir_tabela_campos,
+    _erro_linha_grande,
+    _nome_coluna,
+    _slug,
+)
 
 
 def test_slug_remove_numeracao_e_normaliza():
@@ -73,3 +79,28 @@ def test_construir_pivot_divide_em_lotes_para_evitar_erro_8621():
     assert updates[0].count("LEFT JOIN fato_resposta_tipada") == 40
     assert updates[1].count("LEFT JOIN fato_resposta_tipada") == 40
     assert updates[2].count("LEFT JOIN fato_resposta_tipada") == 15
+
+
+def test_construir_tabela_campos_parte_nao_inclui_colunas_base():
+    """Tabela 'parte' (fato_visita_{id}_p2, _p3...) só tem instancia_id_api
+    como chave de junção — entidade_id_api/ano/periodo/status já estão na
+    tabela principal, repeti-los não ajudaria."""
+    campos = [{"campo_id_api": 30133, "label": "1.1 Data:", "tipo_campo": "DATA"}]
+    ddl, insert_base, _ = _construir_tabela_campos(
+        "fato_visita_1462_p2", 1462, campos, incluir_base=False, colunas_por_lote=40
+    )
+
+    assert "instancia_id_api INT NOT NULL" in ddl
+    assert "entidade_id_api" not in ddl
+    assert "INSERT INTO fato_visita_1462_p2 (instancia_id_api)" in insert_base
+
+
+def test_erro_linha_grande_detecta_mensagem_do_sql_server():
+    erro = Exception(
+        "Cannot create a row of size 8080 which is greater than the allowable maximum row size of 8060."
+    )
+    assert _erro_linha_grande(erro) is True
+
+
+def test_erro_linha_grande_nao_confunde_com_outros_erros():
+    assert _erro_linha_grande(Exception("query processor ran out of stack space")) is False

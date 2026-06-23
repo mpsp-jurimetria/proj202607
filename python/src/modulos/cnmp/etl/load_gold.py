@@ -29,6 +29,7 @@ import re
 import unicodedata
 
 from sqlalchemy import Engine, text
+from sqlalchemy.exc import DBAPIError
 
 from src.infra.warehouse import get_gold_engine
 
@@ -263,36 +264,53 @@ def _campo_para_join(campo: dict) -> tuple[str, str, list[str]]:
     return nome_coluna, valor_expr, joins
 
 
-def _construir_pivot(
-    formulario_id: int, campos: list[dict], colunas_por_lote: int = _COLUNAS_POR_LOTE
+def _construir_tabela_campos(
+    nome_tabela: str, formulario_id: int, campos: list[dict], incluir_base: bool, colunas_por_lote: int
 ) -> tuple[str, str, list[str]]:
-    """Monta o DDL, o INSERT (só colunas base) e os UPDATEs em lote da tabela
-    larga de um formulário."""
-    nome_tabela = f"fato_visita_{formulario_id}"
+    """Monta o DDL, o INSERT (só chave/base) e os UPDATEs em lote de uma
+    tabela contendo um subconjunto de campos de um formulário.
 
+    incluir_base=True: tabela "principal", com instancia_id_api + colunas de
+    contexto (entidade_id_api, ano, periodo, status_atual). incluir_base=False:
+    tabela "parte" (fato_visita_{id}_p2, _p3, ...), só com instancia_id_api
+    como chave de junção — usada quando o formulário precisa ser dividido por
+    exceder o tamanho máximo de linha (erro 511/8060 do Fabric Warehouse).
+    """
     colunas_ddl = [
         f"    {_nome_coluna(c['campo_id_api'], c['label'])} "
         f"{_TIPO_SQL_POR_CAMPO.get(c['tipo_campo'], 'VARCHAR(MAX)')} NULL"
         for c in campos
     ]
 
+    base_ddl = "    instancia_id_api INT NOT NULL"
+    if incluir_base:
+        base_ddl += (
+            ",\n    entidade_id_api INT NOT NULL"
+            ",\n    ano INT NULL"
+            ",\n    periodo INT NULL"
+            ",\n    status_atual VARCHAR(100) NULL"
+        )
+
     ddl = (
         f"DROP TABLE IF EXISTS {nome_tabela};\n"
         f"CREATE TABLE {nome_tabela} (\n"
-        "    instancia_id_api INT NOT NULL,\n"
-        "    entidade_id_api INT NOT NULL,\n"
-        "    ano INT NULL,\n"
-        "    periodo INT NULL,\n"
-        "    status_atual VARCHAR(100) NULL"
+        + base_ddl
         + (",\n" + ",\n".join(colunas_ddl) if colunas_ddl else "")
         + "\n);"
     )
 
-    insert_base = (
-        f"INSERT INTO {nome_tabela} (instancia_id_api, entidade_id_api, ano, periodo, status_atual)\n"
-        "SELECT instancia_id_api, entidade_id_api, ano, periodo, status_atual\n"
-        f"FROM fato_visita\nWHERE formulario_id_api = {formulario_id};"
-    )
+    if incluir_base:
+        insert_base = (
+            f"INSERT INTO {nome_tabela} (instancia_id_api, entidade_id_api, ano, periodo, status_atual)\n"
+            "SELECT instancia_id_api, entidade_id_api, ano, periodo, status_atual\n"
+            f"FROM fato_visita\nWHERE formulario_id_api = {formulario_id};"
+        )
+    else:
+        insert_base = (
+            f"INSERT INTO {nome_tabela} (instancia_id_api)\n"
+            "SELECT instancia_id_api\n"
+            f"FROM fato_visita\nWHERE formulario_id_api = {formulario_id};"
+        )
 
     updates = []
     for inicio in range(0, len(campos), colunas_por_lote):
@@ -316,6 +334,47 @@ def _construir_pivot(
     return ddl, insert_base, updates
 
 
+def _construir_pivot(
+    formulario_id: int, campos: list[dict], colunas_por_lote: int = _COLUNAS_POR_LOTE
+) -> tuple[str, str, list[str]]:
+    """Tabela única (caso comum) para um formulário — ver _construir_tabela_campos."""
+    return _construir_tabela_campos(
+        f"fato_visita_{formulario_id}", formulario_id, campos, incluir_base=True, colunas_por_lote=colunas_por_lote
+    )
+
+
+def _erro_linha_grande(exc: Exception) -> bool:
+    """Detecta o erro 511 do SQL Server/Fabric Warehouse: linha resultante
+    maior que o limite (8060 bytes), de tantas colunas de texto populadas."""
+    mensagem = str(exc).lower()
+    return "maximum row size" in mensagem or "8060" in mensagem
+
+
+def _recarregar_pivot_particionado(engine: Engine, formulario_id: int, campos: list[dict]) -> None:
+    """Quando a tabela única excede o tamanho máximo de linha, divide o
+    formulário em várias tabelas (fato_visita_{id}, _p2, _p3, ...), cada uma
+    com um lote de colunas — bem abaixo do limite por conter poucas colunas."""
+    lotes = [campos[i : i + _COLUNAS_POR_LOTE] for i in range(0, len(campos), _COLUNAS_POR_LOTE)]
+
+    with engine.begin() as conn:
+        for indice, lote in enumerate(lotes, start=1):
+            sufixo = "" if indice == 1 else f"_p{indice}"
+            nome_tabela = f"fato_visita_{formulario_id}{sufixo}"
+            ddl, insert_base, updates = _construir_tabela_campos(
+                nome_tabela, formulario_id, lote, incluir_base=(indice == 1), colunas_por_lote=_COLUNAS_POR_LOTE
+            )
+            conn.execute(text(ddl))
+            conn.execute(text(insert_base))
+            for update in updates:
+                conn.execute(text(update))
+            logger.info("%s recarregada (%d colunas, parte %d/%d)", nome_tabela, len(lote), indice, len(lotes))
+
+    logger.info(
+        "fato_visita_%s: dividido em %d tabelas (excedia o tamanho máximo de linha)",
+        formulario_id, len(lotes),
+    )
+
+
 def _recarregar_tabelas_pivotadas(engine: Engine) -> None:
     with engine.connect() as conn:
         formularios = [
@@ -324,23 +383,34 @@ def _recarregar_tabelas_pivotadas(engine: Engine) -> None:
         ]
 
     # Uma transação por formulário, não uma só para todos — se um formulário
-    # falhar (ex.: erro 8621 num form grande), os outros já recarregados não
-    # são desfeitos numa nova tentativa.
+    # falhar, os outros já recarregados não são desfeitos numa nova tentativa.
     for formulario_id in formularios:
-        with engine.begin() as conn:
-            campos = _campos_pivotaveis(conn, formulario_id)
-            ddl, insert_base, updates = _construir_pivot(formulario_id, campos)
-            conn.execute(text(ddl))
-            conn.execute(text(insert_base))
-            for indice_lote, update in enumerate(updates, start=1):
-                conn.execute(text(update))
-                logger.info(
-                    "fato_visita_%s: lote %d/%d de colunas preenchido",
-                    formulario_id, indice_lote, len(updates),
-                )
+        with engine.connect() as conn_leitura:
+            campos = _campos_pivotaveis(conn_leitura, formulario_id)
+
+        try:
+            with engine.begin() as conn:
+                ddl, insert_base, updates = _construir_pivot(formulario_id, campos)
+                conn.execute(text(ddl))
+                conn.execute(text(insert_base))
+                for indice_lote, update in enumerate(updates, start=1):
+                    conn.execute(text(update))
+                    logger.info(
+                        "fato_visita_%s: lote %d/%d de colunas preenchido",
+                        formulario_id, indice_lote, len(updates),
+                    )
             logger.info(
-                "fato_visita_%s recarregada (%d colunas de campo)", formulario_id, len(campos)
+                "fato_visita_%s recarregada (tabela única, %d colunas de campo)",
+                formulario_id, len(campos),
             )
+        except DBAPIError as exc:
+            if not _erro_linha_grande(exc):
+                raise
+            logger.info(
+                "fato_visita_%s: excedeu o tamanho máximo de linha numa tabela só, dividindo em partes",
+                formulario_id,
+            )
+            _recarregar_pivot_particionado(engine, formulario_id, campos)
 
 
 def carregar_gold(engine: Engine) -> None:
