@@ -317,13 +317,17 @@ def _construir_pivot(
 
 
 def _recarregar_tabelas_pivotadas(engine: Engine) -> None:
-    with engine.begin() as conn:
+    with engine.connect() as conn:
         formularios = [
             row[0]
             for row in conn.execute(text("SELECT formulario_id_api FROM dim_formulario")).all()
         ]
 
-        for formulario_id in formularios:
+    # Uma transação por formulário, não uma só para todos — se um formulário
+    # falhar (ex.: erro 8621 num form grande), os outros já recarregados não
+    # são desfeitos numa nova tentativa.
+    for formulario_id in formularios:
+        with engine.begin() as conn:
             campos = _campos_pivotaveis(conn, formulario_id)
             ddl, insert_base, updates = _construir_pivot(formulario_id, campos)
             conn.execute(text(ddl))
