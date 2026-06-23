@@ -1,6 +1,7 @@
 """Conexão com o Lakehouse (OneLake) para armazenamento de arquivos brutos."""
 
 import os
+import threading
 from pathlib import Path
 
 from azure.identity import AzureCliCredential, ClientSecretCredential
@@ -39,10 +40,14 @@ def _get_credential() -> "_NotebookCredential | AzureCliCredential | ClientSecre
 
 _client_cache: DataLakeServiceClient | None = None
 _fs_cache: dict[str, FileSystemClient] = {}
+# RLock (não Lock comum): _get_filesystem_client adquire o lock e chama
+# get_client() por dentro, que adquire o mesmo lock de novo na mesma thread —
+# com Lock comum (não reentrante) isso é deadlock.
+_cache_lock = threading.RLock()
 
 
 def get_client() -> DataLakeServiceClient:
-    """Cliente do OneLake, reaproveitado entre chamadas.
+    """Cliente do OneLake, reaproveitado entre chamadas (e entre threads).
 
     Criar um DataLakeServiceClient novo a cada chamada também descarta o cache
     de token do azure-core — em uma carga com milhares de leituras (uma por
@@ -50,18 +55,20 @@ def get_client() -> DataLakeServiceClient:
     o cliente deixa o SDK cachear o token normalmente (válido por ~1h).
     """
     global _client_cache
-    if _client_cache is None:
-        _client_cache = DataLakeServiceClient(
-            account_url="https://onelake.dfs.fabric.microsoft.com",
-            credential=_get_credential(),
-        )
-    return _client_cache
+    with _cache_lock:
+        if _client_cache is None:
+            _client_cache = DataLakeServiceClient(
+                account_url="https://onelake.dfs.fabric.microsoft.com",
+                credential=_get_credential(),
+            )
+        return _client_cache
 
 
 def _get_filesystem_client(workspace_id: str) -> FileSystemClient:
-    if workspace_id not in _fs_cache:
-        _fs_cache[workspace_id] = get_client().get_file_system_client(file_system=workspace_id)
-    return _fs_cache[workspace_id]
+    with _cache_lock:
+        if workspace_id not in _fs_cache:
+            _fs_cache[workspace_id] = get_client().get_file_system_client(file_system=workspace_id)
+        return _fs_cache[workspace_id]
 
 
 def _bronze_ids() -> tuple[str, str]:

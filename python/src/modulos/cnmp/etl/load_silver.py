@@ -13,6 +13,7 @@ Execute:
 import io
 import logging
 import os
+from concurrent.futures import ThreadPoolExecutor
 
 from sqlalchemy import Engine, text
 
@@ -32,6 +33,17 @@ from src.modulos.cnmp.etl.transform_silver import (
 logging.basicConfig(level=logging.WARNING)
 logging.getLogger("src.modulos.cnmp.etl").setLevel(logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Leituras do bronze são chamadas HTTP independentes (I/O-bound) — paraleliza
+# bem mesmo em Python (GIL não é o limitante aqui, é a espera de rede).
+_MAX_WORKERS_LEITURA = 16
+
+
+def _mapear_paralelo(funcao, itens: list) -> list:
+    if not itens:
+        return []
+    with ThreadPoolExecutor(max_workers=_MAX_WORKERS_LEITURA) as executor:
+        return list(executor.map(funcao, itens))
 
 
 # Fabric Warehouse (esta edição) rejeita, no CREATE TABLE: PRIMARY KEY (erro
@@ -263,31 +275,39 @@ def carregar_silver(engine: Engine, ambientes_ids: list[int]) -> None:
             entidades = read_bronze.ler_entidades(formulario_id)
             entidade_rows.extend(linhas_dim_entidade(entidades, ambiente_id))
             logger.info(
-                "formulário %s: lendo bronze de %d entidades", formulario_id, len(entidades)
+                "formulário %s: lendo bronze de %d entidades (em paralelo)",
+                formulario_id, len(entidades),
             )
 
-            total_instancias_formulario = 0
-            for indice_entidade, entidade in enumerate(entidades, start=1):
-                entidade_id = entidade["id"]
-                instancias = read_bronze.ler_instancias(formulario_id, entidade_id)
+            def _ler_instancias_entidade(entidade: dict) -> tuple[int, list[dict]]:
+                return entidade["id"], read_bronze.ler_instancias(formulario_id, entidade["id"])
 
-                for instancia in instancias:
-                    instancia_rows.append(
-                        linha_fato_instancia(instancia, formulario_id, entidade_id)
-                    )
-                    detalhe_instancia = read_bronze.ler_detalhe_instancia(
-                        formulario_id, entidade_id, instancia["id"]
-                    )
-                    resposta_rows.extend(
-                        linhas_fato_resposta(instancia["id"], detalhe_instancia.get("conteudo", []))
-                    )
-                    total_instancias_formulario += 1
+            pares_entidade_instancias = _mapear_paralelo(_ler_instancias_entidade, entidades)
 
-                if indice_entidade % 50 == 0 or indice_entidade == len(entidades):
-                    logger.info(
-                        "formulário %s: %d/%d entidades lidas (%d instâncias até agora)",
-                        formulario_id, indice_entidade, len(entidades), total_instancias_formulario,
-                    )
+            pares_entidade_instancia: list[tuple[int, dict]] = [
+                (entidade_id, instancia)
+                for entidade_id, instancias in pares_entidade_instancias
+                for instancia in instancias
+            ]
+            for entidade_id, instancia in pares_entidade_instancia:
+                instancia_rows.append(linha_fato_instancia(instancia, formulario_id, entidade_id))
+
+            logger.info(
+                "formulário %s: lendo bronze de %d instâncias (em paralelo)",
+                formulario_id, len(pares_entidade_instancia),
+            )
+
+            def _ler_resposta_instancia(par: tuple[int, dict]) -> list[dict]:
+                entidade_id, instancia = par
+                detalhe_instancia = read_bronze.ler_detalhe_instancia(
+                    formulario_id, entidade_id, instancia["id"]
+                )
+                return linhas_fato_resposta(instancia["id"], detalhe_instancia.get("conteudo", []))
+
+            for linhas_resposta in _mapear_paralelo(_ler_resposta_instancia, pares_entidade_instancia):
+                resposta_rows.extend(linhas_resposta)
+
+            logger.info("formulário %s: leitura do bronze concluída", formulario_id)
 
     recarregar_tabela(
         engine,
