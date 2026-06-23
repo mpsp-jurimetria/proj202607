@@ -245,6 +245,7 @@ def carregar_silver(engine: Engine, ambientes_ids: list[int]) -> None:
 
     for ambiente_id in ambientes_ids:
         formularios = read_bronze.ler_formularios(ambiente_id)
+        logger.info("ambiente %s: lendo bronze de %d formulários", ambiente_id, len(formularios))
 
         for formulario in formularios:
             formulario_id = formulario["id"]
@@ -261,8 +262,12 @@ def carregar_silver(engine: Engine, ambientes_ids: list[int]) -> None:
 
             entidades = read_bronze.ler_entidades(formulario_id)
             entidade_rows.extend(linhas_dim_entidade(entidades, ambiente_id))
+            logger.info(
+                "formulário %s: lendo bronze de %d entidades", formulario_id, len(entidades)
+            )
 
-            for entidade in entidades:
+            total_instancias_formulario = 0
+            for indice_entidade, entidade in enumerate(entidades, start=1):
                 entidade_id = entidade["id"]
                 instancias = read_bronze.ler_instancias(formulario_id, entidade_id)
 
@@ -275,6 +280,13 @@ def carregar_silver(engine: Engine, ambientes_ids: list[int]) -> None:
                     )
                     resposta_rows.extend(
                         linhas_fato_resposta(instancia["id"], detalhe_instancia.get("conteudo", []))
+                    )
+                    total_instancias_formulario += 1
+
+                if indice_entidade % 50 == 0 or indice_entidade == len(entidades):
+                    logger.info(
+                        "formulário %s: %d/%d entidades lidas (%d instâncias até agora)",
+                        formulario_id, indice_entidade, len(entidades), total_instancias_formulario,
                     )
 
     recarregar_tabela(

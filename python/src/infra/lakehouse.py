@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 
 from azure.identity import AzureCliCredential, ClientSecretCredential
-from azure.storage.filedatalake import DataLakeServiceClient
+from azure.storage.filedatalake import DataLakeServiceClient, FileSystemClient
 
 
 class _NotebookCredential:
@@ -37,11 +37,31 @@ def _get_credential() -> "_NotebookCredential | AzureCliCredential | ClientSecre
     return AzureCliCredential()
 
 
+_client_cache: DataLakeServiceClient | None = None
+_fs_cache: dict[str, FileSystemClient] = {}
+
+
 def get_client() -> DataLakeServiceClient:
-    return DataLakeServiceClient(
-        account_url="https://onelake.dfs.fabric.microsoft.com",
-        credential=_get_credential(),
-    )
+    """Cliente do OneLake, reaproveitado entre chamadas.
+
+    Criar um DataLakeServiceClient novo a cada chamada também descarta o cache
+    de token do azure-core — em uma carga com milhares de leituras (uma por
+    instância), isso significava buscar um token novo a cada arquivo. Reaproveitar
+    o cliente deixa o SDK cachear o token normalmente (válido por ~1h).
+    """
+    global _client_cache
+    if _client_cache is None:
+        _client_cache = DataLakeServiceClient(
+            account_url="https://onelake.dfs.fabric.microsoft.com",
+            credential=_get_credential(),
+        )
+    return _client_cache
+
+
+def _get_filesystem_client(workspace_id: str) -> FileSystemClient:
+    if workspace_id not in _fs_cache:
+        _fs_cache[workspace_id] = get_client().get_file_system_client(file_system=workspace_id)
+    return _fs_cache[workspace_id]
 
 
 def _bronze_ids() -> tuple[str, str]:
@@ -68,8 +88,7 @@ def upload_file(
     if workspace_id is None or lakehouse_id is None:
         workspace_id, lakehouse_id = _bronze_ids()
 
-    client = get_client()
-    fs = client.get_file_system_client(file_system=workspace_id)
+    fs = _get_filesystem_client(workspace_id)
     full_path = f"{lakehouse_id}/Files/{remote_path}"
     file_client = fs.get_file_client(full_path)
 
@@ -87,8 +106,7 @@ def upload_bytes(
     if workspace_id is None or lakehouse_id is None:
         workspace_id, lakehouse_id = _bronze_ids()
 
-    client = get_client()
-    fs = client.get_file_system_client(file_system=workspace_id)
+    fs = _get_filesystem_client(workspace_id)
     full_path = f"{lakehouse_id}/Files/{remote_path}"
     file_client = fs.get_file_client(full_path)
     file_client.upload_data(data, overwrite=True)
@@ -104,8 +122,7 @@ def download_file(
     if workspace_id is None or lakehouse_id is None:
         workspace_id, lakehouse_id = _bronze_ids()
 
-    client = get_client()
-    fs = client.get_file_system_client(file_system=workspace_id)
+    fs = _get_filesystem_client(workspace_id)
     full_path = f"{lakehouse_id}/Files/{remote_path}"
     file_client = fs.get_file_client(full_path)
 
@@ -123,8 +140,7 @@ def download_bytes(
     if workspace_id is None or lakehouse_id is None:
         workspace_id, lakehouse_id = _bronze_ids()
 
-    client = get_client()
-    fs = client.get_file_system_client(file_system=workspace_id)
+    fs = _get_filesystem_client(workspace_id)
     full_path = f"{lakehouse_id}/Files/{remote_path}"
     file_client = fs.get_file_client(full_path)
     return file_client.download_file().readall()
@@ -139,8 +155,7 @@ def listar_arquivos(
     if workspace_id is None or lakehouse_id is None:
         workspace_id, lakehouse_id = _bronze_ids()
 
-    client = get_client()
-    fs = client.get_file_system_client(file_system=workspace_id)
+    fs = _get_filesystem_client(workspace_id)
     base = f"{lakehouse_id}/Files/{prefixo}"
     prefix_len = len(f"{lakehouse_id}/Files/")
     return [
