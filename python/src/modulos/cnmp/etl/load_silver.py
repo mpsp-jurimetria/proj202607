@@ -10,10 +10,13 @@ Execute:
     uv run python -m src.modulos.cnmp.etl.load_silver
 """
 
+import io
 import logging
+import os
 
 from sqlalchemy import Engine, text
 
+from src.infra.lakehouse import upload_bytes
 from src.infra.warehouse import get_silver_engine
 from src.modulos.cnmp.etl import read_bronze
 from src.modulos.cnmp.etl.transform_silver import (
@@ -160,6 +163,67 @@ def recarregar_tabela(
     logger.info("%s: %d linhas recarregadas", tabela, len(linhas))
 
 
+def _csv_valor(valor: object) -> str:
+    """Codifica um valor para um campo CSV.
+
+    None -> campo vazio sem aspas (lido como NULL pelo COPY INTO). Qualquer
+    string, mesmo vazia, vem entre aspas (lida como string, nunca NULL) —
+    aspas internas são duplicadas conforme RFC 4180. Números vão sem aspas.
+    """
+    if valor is None:
+        return ""
+    if isinstance(valor, (int, float)) and not isinstance(valor, bool):
+        return str(valor)
+    return '"' + str(valor).replace('"', '""') + '"'
+
+
+def recarregar_tabela_copy_into(
+    engine: Engine, tabela: str, colunas: list[str], linhas: list[dict], caminho_staging: str
+) -> None:
+    """Substitui o conteúdo de uma tabela silver via COPY INTO, para tabelas
+    grandes demais para INSERT em lote via pyodbc (ex.: fato_resposta, ~460 mil
+    linhas — o INSERT em lotes levava horas e a conexão era derrubada antes de
+    terminar; VARCHAR(MAX) desativa o fast_executemany do pyodbc).
+
+    Grava as linhas como CSV em memória, sobe num único upload para o
+    Lakehouse mp_bronze (área de staging) e manda o Warehouse ler esse arquivo
+    direto, do lado do servidor — sem passar pela nossa conexão linha a linha.
+    """
+    workspace_id = os.environ["FABRIC_WORKSPACE_ID"]
+    lakehouse_id = os.environ["FABRIC_LAKEHOUSE_ID"]
+
+    if linhas:
+        buffer = io.StringIO()
+        for linha in linhas:
+            buffer.write(",".join(_csv_valor(linha[coluna]) for coluna in colunas))
+            buffer.write("\n")
+        upload_bytes(buffer.getvalue().encode("utf-8"), caminho_staging)
+        logger.info("%s: staging CSV gravado (%d linhas) em %s", tabela, len(linhas), caminho_staging)
+
+    url_staging = f"https://onelake.dfs.fabric.microsoft.com/{workspace_id}/{lakehouse_id}/Files/{caminho_staging}"
+    colunas_sql = ", ".join(colunas)
+
+    with engine.begin() as conn:
+        conn.execute(text(f"DELETE FROM {tabela}"))
+        if linhas:
+            conn.execute(
+                text(
+                    f"""
+                    COPY INTO {tabela} ({colunas_sql})
+                    FROM '{url_staging}'
+                    WITH (
+                        FILE_TYPE = 'CSV',
+                        FIELDQUOTE = '"',
+                        FIELDTERMINATOR = ',',
+                        ROWTERMINATOR = '0x0A',
+                        FIRSTROW = 1
+                    )
+                    """
+                )
+            )
+    logger.info("%s: %d linhas recarregadas via COPY INTO", tabela, len(linhas))
+
+
 def carregar_silver(engine: Engine, ambientes_ids: list[int]) -> None:
     criar_schema(engine)
 
@@ -259,11 +323,12 @@ def carregar_silver(engine: Engine, ambientes_ids: list[int]) -> None:
         ["instancia_id_api", "formulario_id_api", "entidade_id_api", "ano", "periodo", "status_atual"],
         instancia_rows,
     )
-    recarregar_tabela(
+    recarregar_tabela_copy_into(
         engine,
         "fato_resposta",
         ["instancia_id_api", "campo_id_api", "linha", "valor_resposta"],
         resposta_rows,
+        caminho_staging="cnmp/staging/fato_resposta.csv",
     )
 
     logger.info("Carga silver concluída para ambientes %s", ambientes_ids)
