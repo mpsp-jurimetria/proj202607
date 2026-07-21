@@ -10,13 +10,19 @@ recriado ou auditado.
 recarga, `dim_unidade` tem `entidade_id_api` duplicado e o Power BI recusa os
 relacionamentos muitos-para-um.
 
-## 1. Criação no portal
+## 1. Criação
 
-1. Abra o Warehouse `mp_gold` no portal do Fabric.
-2. Menu Relatório (Reporting) > Novo modelo semântico.
-3. Nomeie `mp_gold_resolucao_277` e selecione as tabelas da seção 2.
-4. Abra o modelo em modo de edição (Model view) e configure relacionamentos
-   (seção 3), colunas ocultas (seção 4) e medidas (seção 5).
+A criação é automatizada pelo notebook `03_modelo_semantico.ipynb`, com
+`semantic-link-labs`: ele descobre as tabelas largas e as partes
+(`fato_visita_{id}_p2`, ...) no warehouse, cria o modelo Direct Lake
+(`generate_direct_lake_semantic_model`, com `overwrite=True`), aplica os
+relacionamentos das seções 3, oculta as chaves da seção 4 e cria as medidas
+da seção 5. Rodar o notebook inteiro é idempotente; personalizações manuais
+no modelo são perdidas na recriação, então ajustes duradouros devem ser
+incorporados ao notebook.
+
+Requisito além dos da carga: o endpoint XMLA da capacidade em leitura e
+escrita, que é como o TOM aplica relacionamentos e medidas.
 
 O modelo fica em modo Direct Lake: lê os arquivos delta do Warehouse
 diretamente, sem cópia nem refresh agendado de dados.
