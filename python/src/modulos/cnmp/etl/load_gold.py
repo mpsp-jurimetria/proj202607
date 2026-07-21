@@ -194,7 +194,7 @@ def _recarregar_tabelas_base(engine: Engine) -> None:
         ("dim_unidade", f"""
             DELETE FROM dim_unidade;
             INSERT INTO dim_unidade (entidade_id_api, ambiente_id_api, descricao)
-            SELECT entidade_id_api, ambiente_id_api, descricao
+            SELECT DISTINCT entidade_id_api, ambiente_id_api, descricao
             FROM {silver_db}.dbo.dim_entidade;
         """),
         ("dim_formulario", f"""
