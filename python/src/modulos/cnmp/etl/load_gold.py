@@ -19,6 +19,11 @@ Duas partes:
    idCampo. Construída dinamicamente em Python a partir de dim_campo, porque
    cada formulário tem um conjunto de campos diferente (92 a ~900).
 
+Nomes de coluna das tabelas largas: o alias curado em aliases_campos.ALIASES
+quando existir (ex.: `data_da_visita`), senão o padrão automático
+`c{campo_id_api}_{slug do label}` (ex.: `c30133_data_da_visita`). O mapeamento
+também é materializado na tabela dim_campo_alias.
+
 Execute:
     uv run python -m src.modulos.cnmp.etl.load_gold
 """
@@ -32,6 +37,7 @@ from sqlalchemy import Engine, text
 from sqlalchemy.exc import DBAPIError
 
 from src.infra.warehouse import get_gold_engine
+from src.modulos.cnmp.etl.aliases_campos import ALIASES
 
 logging.basicConfig(level=logging.WARNING)
 logging.getLogger("src.modulos.cnmp.etl").setLevel(logging.INFO)
@@ -87,6 +93,13 @@ CREATE TABLE fato_visita (
     status_atual      VARCHAR(100) NULL
 );
 
+IF OBJECT_ID('dim_campo_alias', 'U') IS NULL
+CREATE TABLE dim_campo_alias (
+    formulario_id_api INT NOT NULL,
+    campo_id_api      INT NOT NULL,
+    alias             VARCHAR(60) NOT NULL
+);
+
 IF OBJECT_ID('fato_resposta_tipada', 'U') IS NULL
 CREATE TABLE fato_resposta_tipada (
     instancia_id_api INT NOT NULL,
@@ -123,8 +136,46 @@ def _slug(label: str, max_len: int = 40) -> str:
     return texto[:max_len].strip("_") or "campo"
 
 
-def _nome_coluna(campo_id_api: int, label: str) -> str:
-    return f"c{campo_id_api}_{_slug(label)}"
+# Colunas fixas da tabela larga; um alias curado não pode colidir com elas.
+_COLUNAS_BASE = {"instancia_id_api", "entidade_id_api", "ano", "periodo", "status_atual"}
+
+_ALIAS_VALIDO = re.compile(r"^[a-z][a-z0-9_]{0,59}$")
+
+
+def _nome_coluna(campo: dict) -> str:
+    """Nome da coluna do campo na tabela larga: o alias curado
+    (aliases_campos.ALIASES), quando existir, senão c{campo_id_api}_{slug}."""
+    alias = campo.get("alias")
+    if alias:
+        return alias
+    return f"c{campo['campo_id_api']}_{_slug(campo['label'])}"
+
+
+def _validar_nomes_colunas(formulario_id: int, campos: list[dict]) -> None:
+    """Falha cedo, antes de qualquer DDL, se os aliases curados de um
+    formulário produzirem nomes inválidos, duplicados ou iguais às colunas
+    base — erros de curadoria em aliases_campos.py."""
+    vistos: dict[str, int] = {}
+    for campo in campos:
+        alias = campo.get("alias")
+        if alias and not _ALIAS_VALIDO.match(alias):
+            raise ValueError(
+                f"formulário {formulario_id}: alias {alias!r} do campo "
+                f"{campo['campo_id_api']} não é um identificador válido "
+                "(esperado ^[a-z][a-z0-9_]{0,59}$)"
+            )
+        nome = _nome_coluna(campo)
+        if nome in _COLUNAS_BASE:
+            raise ValueError(
+                f"formulário {formulario_id}: alias {nome!r} do campo "
+                f"{campo['campo_id_api']} colide com uma coluna base da tabela larga"
+            )
+        if nome in vistos:
+            raise ValueError(
+                f"formulário {formulario_id}: campos {vistos[nome]} e "
+                f"{campo['campo_id_api']} produzem a mesma coluna {nome!r}"
+            )
+        vistos[nome] = campo["campo_id_api"]
 
 
 def criar_schema(engine: Engine) -> None:
@@ -200,6 +251,27 @@ def _recarregar_tabelas_base(engine: Engine) -> None:
             logger.info("%s recarregada", tabela)
 
 
+def _recarregar_dim_campo_alias(engine: Engine) -> None:
+    """Materializa aliases_campos.ALIASES como tabela, para o modelo semântico
+    e consultas ad hoc traduzirem campo_id_api sem depender do código Python."""
+    linhas = [
+        {"formulario_id_api": formulario_id, "campo_id_api": campo_id, "alias": alias}
+        for formulario_id, aliases in ALIASES.items()
+        for campo_id, alias in aliases.items()
+    ]
+    with engine.begin() as conn:
+        conn.execute(text("DELETE FROM dim_campo_alias"))
+        if linhas:
+            conn.execute(
+                text(
+                    "INSERT INTO dim_campo_alias (formulario_id_api, campo_id_api, alias) "
+                    "VALUES (:formulario_id_api, :campo_id_api, :alias)"
+                ),
+                linhas,
+            )
+    logger.info("dim_campo_alias recarregada (%d aliases)", len(linhas))
+
+
 def _campos_pivotaveis(conn, formulario_id: int) -> list[dict]:
     """Campos escalares do formulário, na ordem do questionário.
 
@@ -219,7 +291,11 @@ def _campos_pivotaveis(conn, formulario_id: int) -> list[dict]:
         """),
         {"formulario_id": formulario_id},
     ).mappings().all()
-    return [dict(linha) for linha in linhas]
+    aliases_formulario = ALIASES.get(formulario_id, {})
+    campos = [dict(linha) for linha in linhas]
+    for campo in campos:
+        campo["alias"] = aliases_formulario.get(campo["campo_id_api"])
+    return campos
 
 
 # Colunas por lote de UPDATE ao preencher a tabela larga. Uma query com
@@ -235,7 +311,7 @@ def _campo_para_join(campo: dict) -> tuple[str, str, list[str]]:
     """Para um campo, devolve (nome_coluna, expressão de valor, joins extras)."""
     campo_id = campo["campo_id_api"]
     tipo_campo = campo["tipo_campo"]
-    nome_coluna = _nome_coluna(campo_id, campo["label"])
+    nome_coluna = _nome_coluna(campo)
     alias_resp = f"r{campo_id}"
 
     joins = [
@@ -277,7 +353,7 @@ def _construir_tabela_campos(
     exceder o tamanho máximo de linha (erro 511/8060 do Fabric Warehouse).
     """
     colunas_ddl = [
-        f"    {_nome_coluna(c['campo_id_api'], c['label'])} "
+        f"    {_nome_coluna(c)} "
         f"{_TIPO_SQL_POR_CAMPO.get(c['tipo_campo'], 'VARCHAR(MAX)')} NULL"
         for c in campos
     ]
@@ -387,6 +463,7 @@ def _recarregar_tabelas_pivotadas(engine: Engine) -> None:
     for formulario_id in formularios:
         with engine.connect() as conn_leitura:
             campos = _campos_pivotaveis(conn_leitura, formulario_id)
+        _validar_nomes_colunas(formulario_id, campos)
 
         try:
             with engine.begin() as conn:
@@ -418,6 +495,7 @@ def carregar_gold(engine: Engine) -> None:
     tabelas largas por formulário a partir das tabelas base já recarregadas."""
     criar_schema(engine)
     _recarregar_tabelas_base(engine)
+    _recarregar_dim_campo_alias(engine)
     _recarregar_tabelas_pivotadas(engine)
     logger.info("Carga gold concluída")
 

@@ -1,9 +1,15 @@
+import pytest
+
+from src.modulos.cnmp.etl.aliases_campos import ALIASES
 from src.modulos.cnmp.etl.load_gold import (
+    _ALIAS_VALIDO,
+    _COLUNAS_BASE,
     _construir_pivot,
     _construir_tabela_campos,
     _erro_linha_grande,
     _nome_coluna,
     _slug,
+    _validar_nomes_colunas,
 )
 
 
@@ -16,8 +22,57 @@ def test_slug_label_vazio_cai_no_fallback():
     assert _slug("12.3") == "campo"
 
 
-def test_nome_coluna_prefixa_com_campo_id():
-    assert _nome_coluna(30133, "1.1 Data da visita:") == "c30133_data_da_visita"
+def test_nome_coluna_sem_alias_prefixa_com_campo_id():
+    campo = {"campo_id_api": 30133, "label": "1.1 Data da visita:"}
+    assert _nome_coluna(campo) == "c30133_data_da_visita"
+
+
+def test_nome_coluna_usa_alias_quando_presente():
+    campo = {"campo_id_api": 30133, "label": "1.1 Data da visita:", "alias": "data_visita"}
+    assert _nome_coluna(campo) == "data_visita"
+
+
+def test_validar_nomes_colunas_rejeita_alias_invalido():
+    campos = [{"campo_id_api": 1, "label": "x", "tipo_campo": "TEXTO", "alias": "1_comeca_com_digito"}]
+    with pytest.raises(ValueError, match="identificador válido"):
+        _validar_nomes_colunas(1322, campos)
+
+
+def test_validar_nomes_colunas_rejeita_colisao_com_coluna_base():
+    campos = [{"campo_id_api": 1, "label": "Ano:", "tipo_campo": "TEXTO", "alias": "ano"}]
+    with pytest.raises(ValueError, match="coluna base"):
+        _validar_nomes_colunas(1322, campos)
+
+
+def test_validar_nomes_colunas_rejeita_alias_duplicado():
+    campos = [
+        {"campo_id_api": 1, "label": "a", "tipo_campo": "TEXTO", "alias": "capacidade"},
+        {"campo_id_api": 2, "label": "b", "tipo_campo": "TEXTO", "alias": "capacidade"},
+    ]
+    with pytest.raises(ValueError, match="mesma coluna"):
+        _validar_nomes_colunas(1322, campos)
+
+
+def test_validar_nomes_colunas_aceita_mistura_de_alias_e_fallback():
+    campos = [
+        {"campo_id_api": 1, "label": "1.1 Data da visita:", "tipo_campo": "DATA", "alias": "data_visita"},
+        {"campo_id_api": 2, "label": "1.2 Período:", "tipo_campo": "RADIO", "alias": None},
+    ]
+    _validar_nomes_colunas(1322, campos)  # não levanta
+
+
+def test_aliases_curados_sao_validos_e_unicos_por_formulario():
+    """Garante que edições manuais em aliases_campos.py não introduzam
+    aliases inválidos, duplicados ou colidindo com colunas base."""
+    for formulario_id, aliases in ALIASES.items():
+        campos = [
+            {"campo_id_api": campo_id, "label": "", "tipo_campo": "TEXTO", "alias": alias}
+            for campo_id, alias in aliases.items()
+        ]
+        _validar_nomes_colunas(formulario_id, campos)
+        for alias in aliases.values():
+            assert _ALIAS_VALIDO.match(alias)
+            assert alias not in _COLUNAS_BASE
 
 
 def test_construir_pivot_gera_ddl_com_uma_coluna_por_campo():
