@@ -1,5 +1,49 @@
-from src.modulos.bnmp.etl.transform_silver import linhas_bnmp_dominio, linhas_bnmp_pessoa
+from src.modulos.bnmp.etl.transform_silver import (
+    COLUNAS_BNMP_EVENTO,
+    COLUNAS_BNMP_PECA,
+    linhas_bnmp_dominio,
+    linhas_bnmp_evento,
+    linhas_bnmp_peca,
+    linhas_bnmp_pessoa,
+)
 from src.modulos.bnmp.filtros import filtro_pecas, filtro_pessoas, rotulo_consulta
+
+# Item real de /pecas/light-filter (DTO plano, sem objetos aninhados).
+ITEM_PECA = {
+    "id": 207204272,
+    "numeroPeca": "0003697212025826007725000316",
+    "descricaoTipoPeca": "Mandado de Medidas Diversas da Prisão em Execução",
+    "dataExpedicao": "2026-08-15T03:00:00.000+0000",
+    "dataAssinaturaMagistrado": "2026-06-16T11:29:00",
+    "descricaoStatus": "Ativo",
+    "nomePessoa": "RICARDO DOS SANTOS LUIZ",
+    "numeroCpf": "21429396865",
+    "numeroProcesso": "00036972120258260077",
+    "dataNascimento": "1978-07-28T00:00:00.000+0000",
+    "idTipoPeca": 25,
+    "idOrgaoJudiciario": 9404,
+    "nomeOrgao": "1 VARA CRIMINAL DA COMARCA DE BIRIGUI",
+    "numeroPecaAnterior": None,
+    "sigiloso": False,
+    "agenteExterno": False,
+    "siglaTribunal": "TJSP",
+    "comarca": "Birigui",
+    "medidaCautelares": None,
+}
+
+# Item real de /eventos/light-filter.
+ITEM_EVENTO = {
+    "id": 132116,
+    "numeroEvento": "2024130004425402",
+    "idTipoEvento": 13,
+    "descricaoTipoEvento": "Audiência de Custódia e Análise de Prisão",
+    "descricaoStatusEvento": "Encerrado",
+    "dataCriacao": "2024-09-09T10:00:00.000+0000",
+    "dataEncerramento": None,
+    "nomePessoa": "FULANO DE TAL",
+    "idOrgaoJudiciario": 9404,
+    "agenteExterno": False,
+}
 
 # Item real capturado do endpoint /pessoas/filter, reduzido aos campos usados.
 ITEM_PESSOA = {
@@ -168,6 +212,36 @@ def test_filtro_pecas_com_tipos_peca_ids():
     assert filtros["agenteExterno"] is True
     assert filtros["judiciario"] is False
     assert filtros["tipoMedidaRestritiva"] == {"id": None, "descricao": None}
+
+
+def test_linhas_bnmp_peca():
+    (linha,) = linhas_bnmp_peca([ITEM_PECA], "amostra", 2, "2026-07-27T00:00:00+00:00")
+
+    assert set(linha) == set(COLUNAS_BNMP_PECA)
+    assert linha["peca_id_api"] == 207204272
+    assert linha["pagina"] == 2
+    assert linha["tipo_peca_id"] == 25
+    assert linha["data_expedicao"] == "2026-08-15"
+    assert linha["data_assinatura_magistrado"] == "2026-06-16"
+    assert linha["data_nascimento"] == "1978-07-28"
+    assert linha["sigiloso"] == 0
+    assert linha["comarca"] == "Birigui"
+    assert linha["numero_peca_anterior"] is None
+    # campos ausentes do DTO viram None, não KeyError
+    assert linha["tipo_guia"] is None
+
+
+def test_linhas_bnmp_evento():
+    (linha,) = linhas_bnmp_evento([ITEM_EVENTO], "amostra", 0, "2026-07-27T00:00:00+00:00")
+
+    assert set(linha) == set(COLUNAS_BNMP_EVENTO)
+    assert linha["evento_id_api"] == 132116
+    assert linha["tipo_evento_id"] == 13
+    assert linha["status_evento_descricao"] == "Encerrado"
+    assert linha["data_criacao"] == "2024-09-09"
+    assert linha["data_encerramento"] is None
+    assert linha["agente_externo"] == 0
+    assert linha["observacao"] is None
 
 
 def test_rotulo_consulta_gera_slug_seguro():

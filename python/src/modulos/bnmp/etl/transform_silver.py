@@ -6,6 +6,7 @@ preenchido — os helpers defensivos (_id, _descricao, _sigla...) normalizam.
 """
 
 import json
+from collections.abc import Callable
 
 # -- Helpers defensivos -------------------------------------------------------
 
@@ -155,6 +156,113 @@ COLUNAS_BNMP_PESSOA = [
     "tribunal_sigla",
     "tribunal_nome",
 ]
+
+
+def _linhas_planas(
+    itens: list[dict],
+    mapa: dict[str, tuple[str, Callable[[object], object]]],
+    consulta: str,
+    pagina: int,
+    coletado_em: str,
+    chave: str,
+) -> list[dict]:
+    """Converte itens de DTO plano (peças e eventos) em linhas da silver."""
+    linhas: list[dict] = []
+    for item in itens:
+        linha: dict[str, object] = {
+            chave: item.get("id"),
+            "consulta": consulta,
+            "pagina": pagina,
+            "coletado_em": coletado_em,
+        }
+        for campo_api, (coluna, conversor) in mapa.items():
+            linha[coluna] = conversor(item.get(campo_api))
+        linhas.append(linha)
+    return linhas
+
+
+# Os endpoints light-filter devolvem DTOs planos, sem objetos aninhados.
+_MAPA_PECA: dict[str, tuple[str, Callable[[object], object]]] = {
+    "numeroPeca": ("numero_peca", lambda v: _texto(v, 60)),
+    "numeroPecaAnterior": ("numero_peca_anterior", lambda v: _texto(v, 60)),
+    "idTipoPeca": ("tipo_peca_id", _id),
+    "descricaoTipoPeca": ("tipo_peca_descricao", lambda v: _texto(v, 200)),
+    "descricaoStatus": ("status_descricao", lambda v: _texto(v, 100)),
+    "dataExpedicao": ("data_expedicao", _data),
+    "dataAssinaturaMagistrado": ("data_assinatura_magistrado", _data),
+    "dataAssinaturaServidor": ("data_assinatura_servidor", _data),
+    "dataFimMedida": ("data_fim_medida", _data),
+    "nomeCriador": ("nome_criador", lambda v: _texto(v, 200)),
+    "nomePessoa": ("nome_pessoa", lambda v: _texto(v, 300)),
+    "nomeMae": ("nome_mae", lambda v: _texto(v, 300)),
+    "numeroIndividuo": ("numero_individuo", lambda v: _texto(v, 30)),
+    "numeroCpf": ("numero_cpf", lambda v: _texto(v, 20)),
+    "dataNascimento": ("data_nascimento", _data),
+    "numeroProcesso": ("numero_processo", lambda v: _texto(v, 40)),
+    "idOrgaoJudiciario": ("orgao_judiciario_id", _id),
+    "nomeOrgao": ("orgao_judiciario_nome", lambda v: _texto(v, 300)),
+    "siglaTribunal": ("tribunal_sigla", lambda v: _texto(v, 20)),
+    "comarca": ("comarca", lambda v: _texto(v, 200)),
+    "motivoExpedicao": ("motivo_expedicao", lambda v: _texto(v, 300)),
+    "especiePrisao": ("especie_prisao", lambda v: _texto(v, 200)),
+    "tipoMedidaRestritiva": ("tipo_medida_restritiva", lambda v: _texto(v, 200)),
+    "medidaCautelares": ("medidas_cautelares", lambda v: _texto(v, 1000)),
+    "tipoGuia": ("tipo_guia", lambda v: _texto(v, 100)),
+    "sigiloso": ("sigiloso", _bit),
+    "idSigilo": ("sigilo_id", _id),
+    "sigilo": ("sigilo_descricao", lambda v: _texto(v, 200)),
+    "agenteExterno": ("agente_externo", _bit),
+    "assinadoAgenteExterno": ("assinado_agente_externo", _bit),
+    "torcidaOrganizada": ("torcida_organizada", lambda v: _texto(v, 200)),
+    "torcidaOrganizadaUf": ("torcida_organizada_uf", lambda v: _texto(v, 5)),
+    "torcidaOrganizadaNomeTime": ("torcida_organizada_time", lambda v: _texto(v, 200)),
+    "torcidaOrganizadaNomeTorcida": ("torcida_organizada_nome", lambda v: _texto(v, 200)),
+}
+
+_MAPA_EVENTO: dict[str, tuple[str, Callable[[object], object]]] = {
+    "numeroEvento": ("numero_evento", lambda v: _texto(v, 60)),
+    "idTipoEvento": ("tipo_evento_id", _id),
+    "descricaoTipoEvento": ("tipo_evento_descricao", lambda v: _texto(v, 200)),
+    "descricaoStatusEvento": ("status_evento_descricao", lambda v: _texto(v, 100)),
+    "dataCriacao": ("data_criacao", _data),
+    "dataAtualizacao": ("data_atualizacao", _data),
+    "dataValidacao": ("data_validacao", _data),
+    "dataEncerramento": ("data_encerramento", _data),
+    "nomePessoa": ("nome_pessoa", lambda v: _texto(v, 300)),
+    "nomeMae": ("nome_mae", lambda v: _texto(v, 300)),
+    "numeroIndividuo": ("numero_individuo", lambda v: _texto(v, 30)),
+    "numeroCpf": ("numero_cpf", lambda v: _texto(v, 20)),
+    "numeroProcesso": ("numero_processo", lambda v: _texto(v, 40)),
+    "idOrgaoJudiciario": ("orgao_judiciario_id", _id),
+    "nomeOrgao": ("orgao_judiciario_nome", lambda v: _texto(v, 300)),
+    "idUsuarioCriador": ("usuario_criador_id", _id),
+    "nomeUsuarioCriador": ("usuario_criador_nome", lambda v: _texto(v, 200)),
+    "idUsuarioValidacao": ("usuario_validacao_id", _id),
+    "nomeUsuarioValidacao": ("usuario_validacao_nome", lambda v: _texto(v, 200)),
+    "nomeUsuarioAtualizacao": ("usuario_atualizacao_nome", lambda v: _texto(v, 200)),
+    "justificativaCancelamento": ("justificativa_cancelamento", lambda v: _texto(v, 2000)),
+    "observacao": ("observacao", lambda v: _texto(v, 2000)),
+    "agenteExterno": ("agente_externo", _bit),
+}
+
+_COLUNAS_COMUNS = ["consulta", "pagina", "coletado_em"]
+
+COLUNAS_BNMP_PECA = ["peca_id_api", *_COLUNAS_COMUNS, *(c for c, _ in _MAPA_PECA.values())]
+COLUNAS_BNMP_EVENTO = ["evento_id_api", *_COLUNAS_COMUNS, *(c for c, _ in _MAPA_EVENTO.values())]
+
+
+def linhas_bnmp_peca(
+    itens: list[dict], consulta: str, pagina: int, coletado_em: str
+) -> list[dict]:
+    """Converte os itens de uma página de /pecas/light-filter em linhas da silver."""
+    return _linhas_planas(itens, _MAPA_PECA, consulta, pagina, coletado_em, "peca_id_api")
+
+
+def linhas_bnmp_evento(
+    itens: list[dict], consulta: str, pagina: int, coletado_em: str
+) -> list[dict]:
+    """Converte os itens de uma página de /eventos/light-filter em linhas da silver."""
+    return _linhas_planas(itens, _MAPA_EVENTO, consulta, pagina, coletado_em, "evento_id_api")
 
 
 def linhas_bnmp_pessoa(
