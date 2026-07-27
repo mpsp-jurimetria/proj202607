@@ -55,8 +55,26 @@ def extrair_action_formulario(html_pagina: str) -> str:
     return html.unescape(match.group(1))
 
 
+def e_pagina_configuracao_totp(html_pagina: str) -> bool:
+    """Indica se a página é a de *cadastro* do 2º fator (required action
+    CONFIGURE_TOTP), e não a de verificação.
+
+    A distinção é o campo totpSecret: nessa tela o Keycloak gera um segredo
+    novo a cada acesso e espera que o usuário o cadastre no autenticador. Um
+    segredo guardado no .env não serve aqui — enquanto a conta estiver nesse
+    estado, o login automatizado não tem como prosseguir.
+    """
+    return re.search(r'<input[^>]*\bname="totpSecret"', html_pagina) is not None
+
+
 def detectar_campo_otp(html_pagina: str) -> str | None:
-    """Devolve o nome do campo de OTP ("otp" ou "totp") se a página o exigir."""
+    """Devolve o nome do campo de OTP ("otp" ou "totp") na página de verificação.
+
+    Devolve None na página de configuração (ver e_pagina_configuracao_totp),
+    que também tem um campo totp mas exige cadastro, não verificação.
+    """
+    if e_pagina_configuracao_totp(html_pagina):
+        return None
     match = re.search(r'<input[^>]*\bname="(t?otp)"', html_pagina)
     return match.group(1) if match else None
 
@@ -119,20 +137,6 @@ def _trocar_code_por_token(http: httpx.Client, code: str) -> Token:
     return _montar_token(resposta.json())
 
 
-def _seguir_redirects_ate_code(http: httpx.Client, resposta: httpx.Response) -> str:
-    """Segue a cadeia de 302 do Keycloak até a Location apontar para o redirect_uri."""
-    for _ in range(_MAX_REDIRECTS):
-        if resposta.status_code not in (301, 302, 303):
-            raise RuntimeError(
-                f"Fluxo do SSO interrompido: status {resposta.status_code} sem redirect"
-            )
-        location = resposta.headers["location"]
-        if location.startswith(_REDIRECT_URI):
-            return extrair_code(location)
-        resposta = http.get(location)
-    raise RuntimeError("Fluxo do SSO excedeu o limite de redirects sem chegar ao code")
-
-
 def _enviar_otp(http: httpx.Client, html_pagina: str, campo_otp: str, segredo_otp: str) -> httpx.Response:
     """Envia o código TOTP; em código inválido por virada de janela, tenta uma 2ª vez."""
     for tentativa in (1, 2):
@@ -151,6 +155,49 @@ def _enviar_otp(http: httpx.Client, html_pagina: str, campo_otp: str, segredo_ot
         else:
             raise RuntimeError(f"Falha no OTP do BNMP: {erro}")
     raise AssertionError("inalcançável")
+
+
+def _percorrer_fluxo_ate_code(
+    http: httpx.Client, resposta: httpx.Response, segredo_otp: str | None
+) -> str:
+    """Avança o fluxo do Keycloak até capturar o code do redirect final.
+
+    Entre o POST das credenciais e o redirect final o Keycloak pode intercalar
+    redirects e páginas de formulário (verificação de OTP, ações obrigatórias).
+    """
+    for _ in range(_MAX_REDIRECTS):
+        if resposta.status_code in (301, 302, 303):
+            location = resposta.headers["location"]
+            if location.startswith(_REDIRECT_URI):
+                return extrair_code(location)
+            resposta = http.get(location)
+            continue
+
+        if resposta.status_code == 200:
+            html_pagina = resposta.text
+            if e_pagina_configuracao_totp(html_pagina):
+                raise RuntimeError(
+                    "O SSO do PJe está exigindo o cadastro do 2º fator (CONFIGURE_TOTP) "
+                    "para esta conta. Conclua o cadastro uma vez pelo navegador, em "
+                    "https://bnmp.pdpj.jus.br, guardando o segredo base32 exibido, e "
+                    "coloque esse segredo em BNMP_OTP_SECRET. Enquanto a conta estiver "
+                    "nesse estado, o Keycloak gera um segredo novo a cada login e a "
+                    "automação não tem como prosseguir."
+                )
+            campo_otp = detectar_campo_otp(html_pagina)
+            if campo_otp:
+                if not segredo_otp:
+                    raise ValueError(
+                        "O SSO exigiu OTP mas BNMP_OTP_SECRET não está definido no .env"
+                    )
+                resposta = _enviar_otp(http, html_pagina, campo_otp, segredo_otp)
+                continue
+            erro = extrair_erro_login(html_pagina) or "resposta inesperada do SSO"
+            raise RuntimeError(f"Falha no login do BNMP: {erro}")
+
+        raise RuntimeError(f"Fluxo do SSO interrompido: status {resposta.status_code}")
+
+    raise RuntimeError("Fluxo do SSO excedeu o limite de etapas sem chegar ao code")
 
 
 def autenticar(
@@ -180,19 +227,7 @@ def autenticar(
             headers={"Referer": str(pagina_login.url)},
         )
 
-        if resposta.status_code == 200:
-            campo_otp = detectar_campo_otp(resposta.text)
-            if campo_otp:
-                if not segredo_otp:
-                    raise ValueError(
-                        "O SSO exigiu OTP mas BNMP_OTP_SECRET não está definido no .env"
-                    )
-                resposta = _enviar_otp(http, resposta.text, campo_otp, segredo_otp)
-            else:
-                erro = extrair_erro_login(resposta.text) or "resposta inesperada do SSO"
-                raise RuntimeError(f"Falha no login do BNMP: {erro}")
-
-        code = _seguir_redirects_ate_code(http, resposta)
+        code = _percorrer_fluxo_ate_code(http, resposta, segredo_otp)
         token = _trocar_code_por_token(http, code)
         logger.info("Login no BNMP concluído — token válido por ~8h")
         return token

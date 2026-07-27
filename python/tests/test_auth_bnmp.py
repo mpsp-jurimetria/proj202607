@@ -2,6 +2,7 @@ import pytest
 
 from src.modulos.bnmp.auth import (
     detectar_campo_otp,
+    e_pagina_configuracao_totp,
     extrair_action_formulario,
     extrair_code,
     extrair_erro_login,
@@ -29,6 +30,19 @@ HTML_OTP = """
 
 HTML_OTP_ANTIGO = '<form action="/x"><input name="totp" type="text" /></form>'
 
+# Página de cadastro do 2º fator (required action CONFIGURE_TOTP): tem campo
+# totp, mas também totpSecret — o segredo é gerado pelo servidor a cada acesso.
+HTML_CONFIGURACAO_TOTP = """
+<html><body>
+  <h2>Você está se autenticando em BNMP</h2>
+  <form action="https://sso.cloud.pje.jus.br/auth/realms/pje/login-actions/required-action?execution=CONFIGURE_TOTP"
+        method="post">
+    <input type="text" id="totp" name="totp" autocomplete="off" />
+    <input type="hidden" id="totpSecret" name="totpSecret" value="ABCDEFGHIJKLMNOP" />
+  </form>
+</body></html>
+"""
+
 HTML_ERRO = """
 <html><body>
   <span id="input-error" class="pf-c-form__helper-text pf-m-error">Usuário ou senha inválidos.</span>
@@ -54,6 +68,14 @@ def test_detectar_campo_otp():
     assert detectar_campo_otp(HTML_OTP) == "otp"
     assert detectar_campo_otp(HTML_OTP_ANTIGO) == "totp"
     assert detectar_campo_otp(HTML_LOGIN) is None
+
+
+def test_pagina_de_configuracao_nao_e_tratada_como_verificacao():
+    assert e_pagina_configuracao_totp(HTML_CONFIGURACAO_TOTP) is True
+    assert e_pagina_configuracao_totp(HTML_OTP) is False
+    # sem isso, a automação tentaria validar um código contra um segredo que o
+    # servidor acabou de gerar, em vez de avisar que falta cadastrar o 2º fator
+    assert detectar_campo_otp(HTML_CONFIGURACAO_TOTP) is None
 
 
 def test_extrair_erro_login():
