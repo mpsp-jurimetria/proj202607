@@ -38,6 +38,7 @@ from sqlalchemy.exc import DBAPIError
 
 from src.infra.warehouse import get_gold_engine
 from src.modulos.cnmp.etl.aliases_campos import ALIASES
+from src.modulos.sap.depara_unidades import DEPARA
 
 logging.basicConfig(level=logging.WARNING)
 logging.getLogger("src.modulos.cnmp.etl").setLevel(logging.INFO)
@@ -52,7 +53,18 @@ IF OBJECT_ID('dim_unidade', 'U') IS NULL
 CREATE TABLE dim_unidade (
     entidade_id_api INT NOT NULL,
     ambiente_id_api INT NOT NULL,
-    descricao       VARCHAR(300) NOT NULL
+    descricao       VARCHAR(300) NOT NULL,
+    municipio       VARCHAR(120) NULL,
+    cod_ibge        INT NULL,
+    regional        VARCHAR(120) NULL,
+    raj             VARCHAR(120) NULL,
+    comarca         VARCHAR(150) NULL
+);
+
+IF OBJECT_ID('dim_unidade_sap', 'U') IS NULL
+CREATE TABLE dim_unidade_sap (
+    entidade_id_api  INT NOT NULL,
+    sap_unidade_nome VARCHAR(200) NOT NULL
 );
 
 IF OBJECT_ID('dim_formulario', 'U') IS NULL
@@ -178,8 +190,30 @@ def _validar_nomes_colunas(formulario_id: int, campos: list[dict]) -> None:
         vistos[nome] = campo["campo_id_api"]
 
 
+def _migrar_dim_unidade(conn) -> None:
+    """dim_unidade criada antes do enriquecimento SAP não tem a coluna
+    municipio; como a carga é sempre completa (DELETE + INSERT), basta dropar
+    para o IF OBJECT_ID do DDL recriar com as colunas novas, sem perda."""
+    existe_coluna = conn.execute(
+        text(
+            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
+            "WHERE TABLE_NAME = 'dim_unidade' AND COLUMN_NAME = 'municipio'"
+        )
+    ).scalar()
+    existe_tabela = conn.execute(
+        text(
+            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES "
+            "WHERE TABLE_NAME = 'dim_unidade'"
+        )
+    ).scalar()
+    if existe_tabela and not existe_coluna:
+        conn.execute(text("DROP TABLE dim_unidade"))
+        logger.info("dim_unidade sem colunas SAP: dropada para recriação com o schema novo")
+
+
 def criar_schema(engine: Engine) -> None:
     with engine.begin() as conn:
+        _migrar_dim_unidade(conn)
         for statement in DDL_GOLD.strip().split(";\n\n"):
             statement = statement.strip()
             if statement:
@@ -187,16 +221,96 @@ def criar_schema(engine: Engine) -> None:
     logger.info("Schema gold (tabelas base) criado/verificado")
 
 
-def _recarregar_tabelas_base(engine: Engine) -> None:
-    silver_db = os.environ["FABRIC_WAREHOUSE_SILVER_NAME"]
+def _sap_unidade_existe(engine: Engine, silver_db: str) -> bool:
+    with engine.connect() as conn:
+        total = conn.execute(
+            text(
+                f"SELECT COUNT(*) FROM {silver_db}.INFORMATION_SCHEMA.TABLES "
+                "WHERE TABLE_NAME = 'sap_unidade'"
+            )
+        ).scalar()
+    return bool(total)
 
-    comandos = [
-        ("dim_unidade", f"""
+
+def _validar_depara(engine: Engine, silver_db: str) -> None:
+    """Falha cedo se o de-para curado apontar para nomes que não existem em
+    sap_unidade — um nome errado geraria NULL silencioso em dim_unidade."""
+    with engine.connect() as conn:
+        nomes_sap = {
+            linha[0]
+            for linha in conn.execute(
+                text(f"SELECT unidade_nome FROM {silver_db}.dbo.sap_unidade")
+            )
+        }
+    fora = {nome for nome in DEPARA.values() if nome not in nomes_sap}
+    if fora:
+        raise ValueError(
+            f"de-para (depara_unidades.py) com {len(fora)} nomes ausentes de "
+            f"sap_unidade, ex.: {sorted(fora)[:3]}"
+        )
+
+
+def _recarregar_dim_unidade_sap(engine: Engine) -> None:
+    """Materializa depara_unidades.DEPARA como tabela, para auditoria e para o
+    JOIN de enriquecimento da dim_unidade."""
+    linhas = [
+        {"entidade_id_api": entidade_id, "sap_unidade_nome": nome}
+        for entidade_id, nome in DEPARA.items()
+    ]
+    with engine.begin() as conn:
+        conn.execute(text("DELETE FROM dim_unidade_sap"))
+        if linhas:
+            conn.execute(
+                text(
+                    "INSERT INTO dim_unidade_sap (entidade_id_api, sap_unidade_nome) "
+                    "VALUES (:entidade_id_api, :sap_unidade_nome)"
+                ),
+                linhas,
+            )
+    logger.info("dim_unidade_sap recarregada (%d unidades mapeadas)", len(linhas))
+
+
+def _sql_dim_unidade(silver_db: str, com_sap: bool) -> str:
+    """INSERT da dim_unidade: enriquecida com município/regional/RAJ via
+    de-para + sap_unidade quando a tabela existir no silver; senão só as
+    colunas do CNMP, com NULL no restante (o módulo SAP pode ainda não ter
+    sido carregado)."""
+    if not com_sap:
+        return f"""
             DELETE FROM dim_unidade;
             INSERT INTO dim_unidade (entidade_id_api, ambiente_id_api, descricao)
             SELECT DISTINCT entidade_id_api, ambiente_id_api, descricao
             FROM {silver_db}.dbo.dim_entidade;
-        """),
+        """
+    return f"""
+        DELETE FROM dim_unidade;
+        INSERT INTO dim_unidade
+            (entidade_id_api, ambiente_id_api, descricao, municipio, cod_ibge, regional, raj, comarca)
+        SELECT DISTINCT
+            e.entidade_id_api, e.ambiente_id_api, e.descricao,
+            s.municipio, s.cod_ibge, s.regional, s.raj, s.comarca
+        FROM {silver_db}.dbo.dim_entidade e
+        LEFT JOIN dim_unidade_sap d ON d.entidade_id_api = e.entidade_id_api
+        LEFT JOIN {silver_db}.dbo.sap_unidade s ON s.unidade_nome = d.sap_unidade_nome;
+    """
+
+
+def _recarregar_tabelas_base(engine: Engine) -> None:
+    silver_db = os.environ["FABRIC_WAREHOUSE_SILVER_NAME"]
+
+    com_sap = _sap_unidade_existe(engine, silver_db)
+    if com_sap:
+        _validar_depara(engine, silver_db)
+        _recarregar_dim_unidade_sap(engine)
+    else:
+        logger.warning(
+            "sap_unidade não existe no %s: dim_unidade será carregada sem "
+            "município/regional/RAJ (rode a carga silver do módulo SAP)",
+            silver_db,
+        )
+
+    comandos = [
+        ("dim_unidade", _sql_dim_unidade(silver_db, com_sap)),
         ("dim_formulario", f"""
             DELETE FROM dim_formulario;
             INSERT INTO dim_formulario (formulario_id_api, ambiente_id_api, nome, periodicidade, versao)

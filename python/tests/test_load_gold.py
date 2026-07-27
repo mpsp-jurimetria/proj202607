@@ -4,11 +4,13 @@ from src.modulos.cnmp.etl.aliases_campos import ALIASES
 from src.modulos.cnmp.etl.load_gold import (
     _ALIAS_VALIDO,
     _COLUNAS_BASE,
+    DDL_GOLD,
     _construir_pivot,
     _construir_tabela_campos,
     _erro_linha_grande,
     _nome_coluna,
     _slug,
+    _sql_dim_unidade,
     _validar_nomes_colunas,
 )
 
@@ -148,6 +150,35 @@ def test_construir_tabela_campos_parte_nao_inclui_colunas_base():
     assert "instancia_id_api INT NOT NULL" in ddl
     assert "entidade_id_api" not in ddl
     assert "INSERT INTO fato_visita_1462_p2 (instancia_id_api)" in insert_base
+
+
+def test_ddl_dim_unidade_tem_colunas_sap():
+    for coluna in ("municipio", "cod_ibge", "regional", "raj", "comarca"):
+        assert coluna in DDL_GOLD
+    assert "dim_unidade_sap" in DDL_GOLD
+
+
+def test_sql_dim_unidade_com_sap_faz_left_join():
+    sql = _sql_dim_unidade("mp_silver", com_sap=True)
+    assert "LEFT JOIN dim_unidade_sap" in sql
+    assert "LEFT JOIN mp_silver.dbo.sap_unidade" in sql
+    assert "SELECT DISTINCT" in sql
+    assert "s.municipio" in sql
+
+
+def test_sql_dim_unidade_sem_sap_carrega_so_colunas_cnmp():
+    sql = _sql_dim_unidade("mp_silver", com_sap=False)
+    assert "sap_unidade" not in sql
+    assert "SELECT DISTINCT entidade_id_api" in sql
+
+
+def test_depara_tem_entidades_unicas_e_nomes_nao_vazios():
+    from src.modulos.sap.depara_unidades import DEPARA
+
+    assert DEPARA, "de-para vazio"
+    for entidade_id, nome in DEPARA.items():
+        assert isinstance(entidade_id, int)
+        assert isinstance(nome, str) and nome.strip()
 
 
 def test_erro_linha_grande_detecta_mensagem_do_sql_server():
