@@ -9,3 +9,5 @@ python/downloads/
 .env
 __pycache__/
 *.pyc
+# capturas de tráfego: contêm tokens de sessão e dados pessoais
+*.har
