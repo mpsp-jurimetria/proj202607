@@ -4,6 +4,7 @@ import os
 import threading
 from pathlib import Path
 
+from azure.core.exceptions import ResourceNotFoundError
 from azure.identity import AzureCliCredential, ClientSecretCredential
 from azure.storage.filedatalake import DataLakeServiceClient, FileSystemClient
 
@@ -158,15 +159,43 @@ def listar_arquivos(
     workspace_id: str | None = None,
     lakehouse_id: str | None = None,
 ) -> list[str]:
-    """Lista caminhos (relativos a Files/) de todos os arquivos sob um prefixo."""
+    """Lista caminhos (relativos a Files/) de todos os arquivos sob um prefixo.
+
+    Prefixo inexistente devolve lista vazia — é o caso normal na primeira
+    execução de uma coleta, antes de qualquer arquivo ter sido gravado.
+    """
     if workspace_id is None or lakehouse_id is None:
         workspace_id, lakehouse_id = _bronze_ids()
 
     fs = _get_filesystem_client(workspace_id)
     base = f"{lakehouse_id}/Files/{prefixo}"
     prefix_len = len(f"{lakehouse_id}/Files/")
-    return [
-        path.name[prefix_len:]
-        for path in fs.get_paths(path=base)
-        if not path.is_directory
-    ]
+    try:
+        return [
+            path.name[prefix_len:]
+            for path in fs.get_paths(path=base)
+            if not path.is_directory
+        ]
+    except ResourceNotFoundError:
+        return []
+
+
+def excluir_diretorio(
+    prefixo: str,
+    workspace_id: str | None = None,
+    lakehouse_id: str | None = None,
+) -> None:
+    """Remove um diretório e todo o seu conteúdo da seção Files do Lakehouse.
+
+    Usado para limpar áreas de staging antes de regravá-las: sobras de uma
+    execução anterior seriam lidas de novo pelo COPY INTO com curinga.
+    Diretório inexistente é ignorado.
+    """
+    if workspace_id is None or lakehouse_id is None:
+        workspace_id, lakehouse_id = _bronze_ids()
+
+    fs = _get_filesystem_client(workspace_id)
+    try:
+        fs.get_directory_client(f"{lakehouse_id}/Files/{prefixo}").delete_directory()
+    except ResourceNotFoundError:
+        pass

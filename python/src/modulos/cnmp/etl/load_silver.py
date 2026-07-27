@@ -175,7 +175,7 @@ def recarregar_tabela(
     logger.info("%s: %d linhas recarregadas", tabela, len(linhas))
 
 
-def _csv_valor(valor: object) -> str:
+def csv_valor(valor: object) -> str:
     """Codifica um valor para um campo CSV.
 
     None -> campo vazio sem aspas (lido como NULL pelo COPY INTO). Qualquer
@@ -207,7 +207,7 @@ def recarregar_tabela_copy_into(
     if linhas:
         buffer = io.StringIO()
         for linha in linhas:
-            buffer.write(",".join(_csv_valor(linha[coluna]) for coluna in colunas))
+            buffer.write(",".join(csv_valor(linha[coluna]) for coluna in colunas))
             buffer.write("\n")
         upload_bytes(buffer.getvalue().encode("utf-8"), caminho_staging)
         logger.info("%s: staging CSV gravado (%d linhas) em %s", tabela, len(linhas), caminho_staging)
