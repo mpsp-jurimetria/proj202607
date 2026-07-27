@@ -137,11 +137,21 @@ def _trocar_code_por_token(http: httpx.Client, code: str) -> Token:
     return _montar_token(resposta.json())
 
 
+def gerar_codigo_totp(segredo_otp: str) -> str:
+    """Gera o código TOTP do momento.
+
+    O Keycloak exibe a chave em grupos separados por espaço na tela de
+    cadastro; aceitar esse formato evita um erro obscuro de base32 quando o
+    segredo é copiado de lá para o .env tal como aparece.
+    """
+    return pyotp.TOTP(segredo_otp.replace(" ", "").strip()).now()
+
+
 def _enviar_otp(http: httpx.Client, html_pagina: str, campo_otp: str, segredo_otp: str) -> httpx.Response:
     """Envia o código TOTP; em código inválido por virada de janela, tenta uma 2ª vez."""
     for tentativa in (1, 2):
         acao = extrair_action_formulario(html_pagina)
-        codigo = pyotp.TOTP(segredo_otp).now()
+        codigo = gerar_codigo_totp(segredo_otp)
         resposta = http.post(acao, data={campo_otp: codigo, "login": "Entrar"})
         if resposta.status_code in (301, 302, 303):
             return resposta
