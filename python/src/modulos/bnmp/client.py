@@ -165,6 +165,18 @@ class BnmpClient:
     def status_pessoas(self) -> list[dict]:
         return self._get("/status-pessoas")
 
+    def municipios(self, tamanho: int = 3000) -> list[dict]:
+        """Lista todos os municípios do país (o endpoint não filtra por UF;
+        o recorte é feito no cliente pelo campo uf.sigla)."""
+        todos: list[dict] = []
+        pagina = 0
+        while True:
+            lote = self._get("/municipios", {"size": tamanho, "page": pagina})
+            todos.extend(lote)
+            if len(lote) < tamanho:
+                return todos
+            pagina += 1
+
     def _params_pagina(
         self, pagina: int, tamanho: int, ordenacao: str | None
     ) -> dict[str, Any]:

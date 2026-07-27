@@ -81,11 +81,15 @@ def filtro_pessoas(
     filtros["buscaOrgaoRecursivo"] = busca_orgao_recursivo
     filtros["sexo"] = _com_id(sexo_id)
     filtros["tipoPesquisa"] = {"id": tipo_pesquisa_id}
+    # statusPessoa é uma LISTA de objetos: {"id": n} é recusado com 400, e os
+    # campos statusPessoaIds/statusPessoaUnico do payload do frontend são
+    # ignorados pelo backend (retornam o total sem filtro).
+    ids_status = list(status_pessoa_ids or [])
     if status_pessoa_id is not None:
-        filtros["statusPessoa"] = {"id": status_pessoa_id}
-    if status_pessoa_ids:
-        filtros["statusPessoaIds"] = status_pessoa_ids
-        filtros["multiploStatusBusca"] = True
+        ids_status.append(status_pessoa_id)
+    if ids_status:
+        filtros["statusPessoa"] = [{"id": item} for item in ids_status]
+        filtros["multiploStatusBusca"] = len(ids_status) > 1
     if unidade_prisional_id is not None:
         filtros["unidadePrisional"] = {"id": unidade_prisional_id}
     return filtros

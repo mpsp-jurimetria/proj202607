@@ -116,11 +116,22 @@ Base `https://bnmp.pdpj.jus.br/v2/api`, Bearer token e header `x-orgao-ativo` (3
 
 Os corpos de filtro são construídos em `python/src/modulos/bnmp/filtros.py`: objeto vazio `{}` significa "sem filtro" para o backend, e cada parâmetro preenchido vira `{"id": valor}`.
 
+### Armadilhas da API (medidas contra a API real, não presumidas)
+
+- **Teto de 10.000 registros por consulta.** `page * size >= 10000` devolve 500 (no limite exato) ou 400 (acima). Vale para qualquer tamanho de página. Uma consulta com mais de 10.000 resultados é impossível de coletar por inteiro: é preciso particioná-la.
+- **`size` até 1.000 é aceito** e devolve o que promete; usar páginas grandes reduz muito o número de requisições.
+- **`statusPessoa` é uma lista de objetos**: `[{"id": 3}]`. Enviar `{"id": 3}` devolve 400 ("Parâmetro informado no formato incorreto").
+- **Vários campos do payload do frontend são ignorados em silêncio** — devolvem o total sem filtro nenhum, sem erro. Confirmados como ignorados: `statusPessoaIds`, `statusPessoaUnico` e `orgao`. Antes de usar um campo como dimensão de particionamento, verifique que a soma das partes bate com o total do todo.
+- Filtros validados como funcionais em `/pessoas/filter`: `estado` (UF), `municipio`, `sexo`, `statusPessoa`, `ativo`, `ufCustodia`, `documento.tipoDocumento`.
+
+### Particionamento da coleta
+
+`python/src/modulos/bnmp/particionamento.py` planeja a coleta automaticamente: mede cada consulta com uma requisição de `size=1` e, enquanto passar de 10.000, subdivide na próxima dimensão (UF → status → sexo → município). O plano é gravado em `bnmp/json/pessoas/_plano.json` com `registros_inalcancaveis`, que quantifica o que ficou fora por partições ainda acima do teto — a perda é visível, nunca silenciosa.
+
+Como a paginação percorre dados vivos, a mesma pessoa pode cair em duas páginas; daí a deduplicação na silver.
+
 ### Camadas
 - Bronze (`bnmp/json/` no `mp_bronze`): uma página por arquivo (`{recurso}/{consulta}/pagina_NNNNNN.json`) mais um `_manifesto.json` com o progresso. Coleta retomável: reexecutar pula as páginas já gravadas.
 - Silver (`mp_silver`): `bnmp_dominio`, `bnmp_pessoa_carga` (tudo o que foi coletado) e `bnmp_pessoa` (deduplicada por `pessoa_id_api`, é a tabela de uso). Carga via CSV em partes no staging + `COPY INTO`.
 
-### Particionamento da coleta
-Quebrar por UF (e, em UF grande, por status) em vez de uma consulta nacional única: a paginação por offset degrada em milhões de registros, o recorte isola falhas e permite retomada mais granular. Como a paginação percorre dados vivos, a mesma pessoa pode cair em duas páginas — daí a deduplicação na silver.
-
-O script `python/scripts/explorar_api_bnmp.py` mede o tamanho de página aceito, o efeito da ordenação e o limite de paginação profunda, além de sondar quais filtros de peças e eventos retornam dados (o HAR do frontend só trouxe respostas vazias desses dois).
+O script `python/scripts/explorar_api_bnmp.py` mede o tamanho de página aceito, o efeito da ordenação e o limite de paginação profunda, além de sondar quais filtros de peças e eventos retornam dados (o HAR do frontend só trouxe respostas vazias desses dois). A saída fica em `python/downloads/bnmp/` (gitignored).

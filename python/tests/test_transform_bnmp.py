@@ -141,18 +141,20 @@ def test_filtro_pessoas_preserva_template_e_aplica_uf():
     filtros = filtro_pessoas(uf_id=26, status_pessoa_id=20)
 
     assert filtros["estado"] == {"id": 26}
-    assert filtros["statusPessoa"] == {"id": 20}
+    # a API recusa {"id": n} aqui com 400; o formato aceito é lista de objetos
+    assert filtros["statusPessoa"] == [{"id": 20}]
     assert filtros["municipio"] == {}
     assert filtros["tipoPesquisa"] == {"id": 1}
     assert filtros["ativo"] is True
     # o template original não pode ser mutado entre chamadas
     assert filtro_pessoas()["estado"] == {}
+    assert filtro_pessoas()["statusPessoa"] is None
 
 
 def test_filtro_pessoas_multiplos_status_liga_flag():
     filtros = filtro_pessoas(status_pessoa_ids=[20, 21])
 
-    assert filtros["statusPessoaIds"] == [20, 21]
+    assert filtros["statusPessoa"] == [{"id": 20}, {"id": 21}]
     assert filtros["multiploStatusBusca"] is True
 
 

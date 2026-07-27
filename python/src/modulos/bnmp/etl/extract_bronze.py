@@ -27,7 +27,8 @@ from datetime import datetime, timezone
 
 from src.infra.lakehouse import listar_arquivos, upload_bytes
 from src.modulos.bnmp.client import BnmpClient
-from src.modulos.bnmp.filtros import filtro_pessoas
+from src.modulos.bnmp.etl import read_bronze
+from src.modulos.bnmp.particionamento import LIMITE_REGISTROS, planejar_pessoas, resumir
 
 logging.basicConfig(level=logging.WARNING)
 logging.getLogger("src.modulos.bnmp.etl").setLevel(logging.INFO)
@@ -102,8 +103,15 @@ def extrair_paginado(
     Lakehouse são puladas (retomada de coleta interrompida).
     """
     existentes = _paginas_existentes(recurso, consulta) if retomar else set()
+    total_paginas: int | None = None
     if existentes:
         logger.info("%s/%s: %d páginas já gravadas — retomando", recurso, consulta, len(existentes))
+        # sem o total da execução anterior, a retomada pediria uma página além
+        # do fim só para descobrir onde parar, e gravaria esse resultado vazio
+        try:
+            total_paginas = read_bronze.ler_manifesto(recurso, consulta).get("total_paginas")
+        except Exception:  # noqa: BLE001 — manifesto ausente ou corrompido
+            logger.info("%s/%s: manifesto anterior indisponível", recurso, consulta)
 
     manifesto = {
         "consulta": consulta,
@@ -135,6 +143,9 @@ def extrair_paginado(
         manifesto["total_elementos"] = resposta.get("totalElements")
         manifesto["total_paginas"] = total_paginas
 
+        if not resposta.get("content"):
+            break
+
         envelope = {
             "consulta": consulta,
             "pagina": pagina,
@@ -156,8 +167,18 @@ def extrair_paginado(
             _gravar_manifesto()
             logger.info("%s/%s: limite de %d páginas atingido", recurso, consulta, max_paginas)
             return manifesto
-        if resposta.get("last", True) or not resposta.get("content"):
+        if resposta.get("last", True):
             break
+        if (pagina + 1) * tamanho >= LIMITE_REGISTROS:
+            # a API recusa offset >= 10.000; insistir só renderia 400/500
+            manifesto["status"] = "truncado_no_limite_da_api"
+            _gravar_manifesto()
+            logger.warning(
+                "%s/%s: limite de %d registros da API atingido com %s no total — "
+                "particione a consulta (ver src/modulos/bnmp/particionamento.py)",
+                recurso, consulta, LIMITE_REGISTROS, manifesto["total_elementos"],
+            )
+            return manifesto
         pagina += 1
 
     manifesto["status"] = "concluido"
@@ -181,18 +202,57 @@ def extrair_eventos(client: BnmpClient, consulta: str, filtros: dict, **kw: obje
     return extrair_paginado(client, "eventos", consulta, filtros, client.filtrar_eventos, **kw)
 
 
+def extrair_pessoas_particionado(
+    client: BnmpClient, uf_ids: list[int] | None = None, tamanho: int = _TAMANHO_PAGINA
+) -> dict:
+    """Planeja e coleta pessoas em partições que cabem no limite da API.
+
+    Uma consulta ampla (UF inteira) tem mais de 10.000 resultados e a API não
+    deixa paginar além disso; o planejador quebra por status, sexo e município
+    até cada consulta ser coletável por inteiro.
+    """
+    particoes = planejar_pessoas(client, uf_ids=uf_ids)
+    plano = resumir(particoes)
+    _gravar("pessoas/_plano.json", {**plano, "particoes_detalhe": [
+        {"rotulo": p.rotulo, "total": p.total, "valores": p.valores} for p in particoes
+    ]})
+    logger.info(
+        "plano de coleta: %d partições, %d registros previstos (%d inalcançáveis)",
+        plano["particoes"], plano["registros_previstos"], plano["registros_inalcancaveis"],
+    )
+
+    for indice, particao in enumerate(particoes, start=1):
+        logger.info(
+            "partição %d/%d — %s (%d registros)",
+            indice, len(particoes), particao.rotulo, particao.total,
+        )
+        extrair_paginado(
+            client, "pessoas", particao.rotulo, particao.filtros,
+            client.filtrar_pessoas, tamanho=tamanho,
+        )
+    return plano
+
+
 def executar(
     consultas_pessoas: list[tuple[str, dict]] | None = None,
     consultas_pecas: list[tuple[str, dict]] | None = None,
     consultas_eventos: list[tuple[str, dict]] | None = None,
+    uf_ids_pessoas: list[int] | None = None,
     tamanho_pagina: int = _TAMANHO_PAGINA,
 ) -> None:
-    """Roda a extração bronze completa: domínios + consultas paginadas."""
+    """Roda a extração bronze: domínios + consultas paginadas.
+
+    Com uf_ids_pessoas, a coleta de pessoas é planejada e particionada
+    automaticamente; consultas_pessoas serve para recortes manuais.
+    """
     with BnmpClient() as client:
         extrair_contexto_sessao(client)
         extrair_dominios(client)
         extrair_status_pessoas(client)
+        _gravar("municipios.json", client.municipios())
 
+        if uf_ids_pessoas:
+            extrair_pessoas_particionado(client, uf_ids_pessoas, tamanho=tamanho_pagina)
         for consulta, filtros in consultas_pessoas or []:
             extrair_pessoas(client, consulta, filtros, tamanho=tamanho_pagina)
         for consulta, filtros in consultas_pecas or []:
@@ -204,5 +264,5 @@ def executar(
 
 
 if __name__ == "__main__":
-    # Recorte padrão: pessoas ativas com custódia/registro em São Paulo (uf 26).
-    executar(consultas_pessoas=[("pessoas_uf-26_ativo-1", filtro_pessoas(uf_id=26))])
+    # 26 = São Paulo
+    executar(uf_ids_pessoas=[26])
