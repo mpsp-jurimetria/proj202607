@@ -31,7 +31,7 @@ diretamente, sem cópia nem refresh agendado de dados.
 
 | Tabela | Papel |
 |---|---|
-| dim_unidade | dimensão: unidade prisional (uma linha por entidade) |
+| dim_unidade | dimensão: unidade prisional (uma linha por entidade), enriquecida com município, cod_ibge, regional, RAJ e comarca da planilha da SAP-SP via de-para curado (`python/src/modulos/sap/depara_unidades.py`) |
 | dim_formulario | dimensão: formulário e periodicidade |
 | fato_visita | fato "cabeçalho": uma linha por visita (instância), todos os formulários |
 | fato_visita_1322 | fato largo: visita semestral, uma coluna por campo |
@@ -47,6 +47,9 @@ Ficam fora do modelo (uso ad hoc via SQL, não em relatório):
 - `fato_resposta_tipada`: EAV completo; útil para os campos de TABELA_DINAMICA,
   que não entram nas tabelas largas. Incluir junto com `dim_campo` quando esse
   caso de uso aparecer.
+- `sap_unidade` (silver) e `dim_unidade_sap` (de-para): a planilha completa da
+  SAP (população, capacidade, mortes, equipe de saúde) fica fora do modelo por
+  decisão de escopo; as colunas geográficas já entram via `dim_unidade`.
 - Tabelas largas dos formulários militares (ambiente 282): incluir quando os
   aliases deles forem curados e houver demanda de relatório.
 
