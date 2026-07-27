@@ -8,7 +8,7 @@ para subsidiar o trabalho do Ministério Público.
 | Módulo | Fonte         | Tipo de acesso     | Status |
 |--------|---------------|--------------------|--------|
 | cnmp   | CNMP          | Login + scraping   | 🔧 em construção |
-| bnmp   | BNMP          | API/scraping       | 📋 planejado |
+| bnmp   | BNMP 2.0 (PDPJ/CNJ) | API REST + SSO Keycloak (usuário/senha + TOTP) | 🔧 em construção |
 | esaj   | ESAJ          | Login + scraping   | 📋 planejado |
 | sap    | SAP-SP        | Download direto    | 📋 planejado |
 
@@ -90,3 +90,37 @@ Arquitetura: **Lakehouse** para arquivos brutos + **Warehouse** para tabelas est
 - Vamos inspecionar a api do cnmp com cuidado para montarmos um schema no lakehouse bem montado. Creio que devemos tomar cuidado porque existe mais de um formulário. Esse schema conterá tabelas bem estruturadas sobre as visitas às unidades prisionais. Possivelmente, teremos de montar um modelo semântico também.
 
 - Os secredos serão obtidos, uma vez implementado o módulo, do vault via notebook. Os nomes no vault são CNMP-USUARIO E CNMP-SENHA. Esta é a url do vault: KVUri = f"https://KV-Jurimetria.vault.azure.net"
+
+## Módulo BNMP
+
+Coleta do Banco Nacional de Monitoramento de Prisões (BNMP 2.0, PDPJ/CNJ), a partir da mesma API REST que o frontend `bnmp-frontend` consome.
+
+### Autenticação
+- SSO do PJe (Keycloak), fluxo authorization_code sem PKCE: `https://sso.cloud.pje.jus.br/auth/realms/pje/protocol/openid-connect`, client_id `bnmp-frontend`, redirect_uri `https://bnmp.pdpj.jus.br/pagina-inicial`.
+- Login browser-less em `python/src/modulos/bnmp/auth.py`: usuário e senha no formulário do Keycloak, código TOTP gerado com `pyotp`, captura do `code` no redirect e troca por tokens.
+- access_token e refresh_token expiram juntos em ~8h; em coletas longas o cliente refaz o login completo sozinho.
+- Segredos no Key Vault `KV-Jurimetria`: `BNMP-USUARIO`, `BNMP-SENHA`, `BNMP-OTP-SECRET`. Local: `BNMP_USER`, `BNMP_PASSWORD`, `BNMP_OTP_SECRET`, `BNMP_ORGAO_ATIVO` no .env.
+- O 2º fator precisa estar **cadastrado** na conta. Se o SSO responder com a required action `CONFIGURE_TOTP`, ele gera um segredo novo a cada login e nenhum segredo salvo funciona — é preciso concluir o cadastro uma vez pelo navegador e guardar o segredo base32 exibido.
+
+### API
+Base `https://bnmp.pdpj.jus.br/v2/api`, Bearer token e header `x-orgao-ativo` (39 = MPSP). Respostas paginadas no padrão Spring (`content`, `totalElements`, `totalPages`, `last`).
+
+| Endpoint | Conteúdo |
+|---|---|
+| `POST /pessoas/filter` | pessoas com registro no BNMP (~5,7 milhões no filtro nacional) |
+| `POST /pecas/light-filter` | mandados de prisão, contramandados, alvarás, guias |
+| `POST /eventos/light-filter` | eventos de prisão, soltura, internação |
+| `GET /dominios` | ~90 listas de referência (status, tipos de peça, motivos, UFs...) |
+| `GET /status-pessoas` | status possíveis de pessoa |
+| `GET /usuario-logado/contexto-sessao` | órgão ativo e permissões da sessão |
+
+Os corpos de filtro são construídos em `python/src/modulos/bnmp/filtros.py`: objeto vazio `{}` significa "sem filtro" para o backend, e cada parâmetro preenchido vira `{"id": valor}`.
+
+### Camadas
+- Bronze (`bnmp/json/` no `mp_bronze`): uma página por arquivo (`{recurso}/{consulta}/pagina_NNNNNN.json`) mais um `_manifesto.json` com o progresso. Coleta retomável: reexecutar pula as páginas já gravadas.
+- Silver (`mp_silver`): `bnmp_dominio`, `bnmp_pessoa_carga` (tudo o que foi coletado) e `bnmp_pessoa` (deduplicada por `pessoa_id_api`, é a tabela de uso). Carga via CSV em partes no staging + `COPY INTO`.
+
+### Particionamento da coleta
+Quebrar por UF (e, em UF grande, por status) em vez de uma consulta nacional única: a paginação por offset degrada em milhões de registros, o recorte isola falhas e permite retomada mais granular. Como a paginação percorre dados vivos, a mesma pessoa pode cair em duas páginas — daí a deduplicação na silver.
+
+O script `python/scripts/explorar_api_bnmp.py` mede o tamanho de página aceito, o efeito da ordenação e o limite de paginação profunda, além de sondar quais filtros de peças e eventos retornam dados (o HAR do frontend só trouxe respostas vazias desses dois).
