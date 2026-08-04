@@ -1,9 +1,9 @@
 Package: proj202607
-Title: What the Package Does (One Line, Title Case)
+Title: Projeto de Monitoramento da Execução Penal e do Sistema Penitenciário de São Paulo
 Version: 0.0.0.9000
 Authors@R: 
     person("First", "Last", , "first.last@example.com", role = c("aut", "cre"))
-Description: What the package does (one paragraph).
+Description: O projeto visa construir um sistema de monitoramento da Execução Penal e do Sistema Penitenciário do Estado de São Paulo que inclua diversas fontes: processos de Execução Penal no Esaj, processos de Execução Penal no Sistema Eletrônico de Execução Unificado, Banco Nacional de Medidas Penais e Prisões, API do Paradeiro do Preso no Sistema de Controle da Movimentação da População Carcerária (GSA), e consulta on-line do Boletim Informativo e Atestado de Conduta Carcerária no Sistema Gestão Penitenciária (GEPEN) e Sistema de Resoluções do Conselho Nacional do Ministério Público.
 License: `use_mit_license()`, `use_gpl3_license()` or friends to pick a
     license
 Encoding: UTF-8
