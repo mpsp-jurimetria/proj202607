@@ -12,6 +12,8 @@ dependencies = [
     "azure-storage-file-datalake>=12.15",
     "openpyxl>=3.1.5",
     "pyotp>=2.10.0",
+    "deltalake>=1.6.2",
+    "pyarrow>=25.0.1",
 ]
 
 [build-system]

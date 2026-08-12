@@ -261,6 +261,15 @@ critérios que funcionaram aqui (inspirados num protótipo de colega já aprovad
 4. Pedir a mensagem de erro completa do Fabric ("See details"), não só a tela — o
    texto genérico da UI ("capacity or license issue") esconde o erro real.
 
+## Ler dado direto do OneLake quando não há rota até o SQL endpoint
+
+Documentado à parte, por ser útil além do contexto de relatórios: ver
+[`leitura-onelake-sem-sql.md`](leitura-onelake-sem-sql.md). Resumo: Warehouse
+também grava as tabelas como Delta no OneLake (mesmo mecanismo do Lakehouse),
+então dá pra ler sem `pyodbc`/SQL endpoint quando só há rota HTTPS. Foi assim
+que diagnosticamos, neste projeto, que um percentual "impossível" no relatório
+era dado incompleto (cobertura desigual entre seções do formulário), não bug.
+
 ## Decisão consciente: git integration via login pessoal, não Service Principal
 
 Fora do escopo deste documento em detalhe (registrado no `CLAUDE.md` do projeto), mas

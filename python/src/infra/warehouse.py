@@ -110,3 +110,66 @@ def check_connection(engine: Engine) -> bool:
         return True
     except Exception:
         return False
+
+
+def _onelake_storage_options() -> dict[str, str]:
+    return {
+        "azure_storage_client_id": os.environ["CLIENT_ID"],
+        "azure_storage_client_secret": os.environ["CLIENT_SECRET"],
+        "azure_storage_tenant_id": os.environ["TENANT_ID"],
+    }
+
+
+def listar_tabelas_onelake(
+    warehouse_id: str, schema: str = "dbo", workspace_id: str | None = None
+) -> list[str]:
+    """Lista as tabelas físicas de um Warehouse via OneLake (pasta Tables/<schema>).
+
+    Alternativa à conexão SQL (pyodbc) quando não há rota de rede até a porta
+    do SQL endpoint, mas há para HTTPS — caso de ambientes de desenvolvimento
+    em sandbox. warehouse_id é o id do *item* no Fabric (guid), não o host de
+    conexão SQL; para descobrir, ver .env.example.
+    """
+    from infra.lakehouse import _get_filesystem_client
+
+    workspace_id = workspace_id or os.environ["FABRIC_WORKSPACE_ID"]
+    fs = _get_filesystem_client(workspace_id)
+    paths = fs.get_paths(path=f"{warehouse_id}/Tables/{schema}", recursive=False)
+    return sorted(p.name.rsplit("/", 1)[-1] for p in paths if p.is_directory)
+
+
+def ler_tabela_onelake(
+    tabela: str,
+    warehouse_id: str,
+    schema: str = "dbo",
+    workspace_id: str | None = None,
+    colunas: list[str] | None = None,
+) -> Any:
+    """Lê uma tabela do Warehouse direto do Delta no OneLake (retorna DataFrame pandas).
+
+    Mesma motivação de listar_tabelas_onelake: contorna a falta de rota até o
+    SQL endpoint. Requer os pacotes deltalake e pyarrow (uv add deltalake pyarrow).
+
+    Limitação conhecida: tabelas gravadas com os recursos de leitor Delta
+    columnMapping ou deletionVectors ainda não são suportadas pelo pacote
+    deltalake (erro DeltaProtocolError) — nesse caso não há solução por aqui
+    até o pacote adicionar suporte; usar a conexão SQL (get_gold_engine /
+    get_silver_engine) de um ambiente com rota de rede até o SQL endpoint.
+    Ver docs/aprendizados-powerbi-fabric.md para mais contexto.
+    """
+    from deltalake import DeltaTable
+
+    workspace_id = workspace_id or os.environ["FABRIC_WORKSPACE_ID"]
+    path = f"abfss://{workspace_id}@onelake.dfs.fabric.microsoft.com/{warehouse_id}/Tables/{schema}/{tabela}"
+    dt = DeltaTable(path, storage_options=_onelake_storage_options())
+    return dt.to_pandas(columns=colunas)
+
+
+def ler_tabela_gold_onelake(tabela: str, colunas: list[str] | None = None) -> Any:
+    """Atalho para ler_tabela_onelake usando FABRIC_WAREHOUSE_GOLD_ID do .env."""
+    return ler_tabela_onelake(tabela, warehouse_id=os.environ["FABRIC_WAREHOUSE_GOLD_ID"], colunas=colunas)
+
+
+def ler_tabela_silver_onelake(tabela: str, colunas: list[str] | None = None) -> Any:
+    """Atalho para ler_tabela_onelake usando FABRIC_WAREHOUSE_SILVER_ID do .env."""
+    return ler_tabela_onelake(tabela, warehouse_id=os.environ["FABRIC_WAREHOUSE_SILVER_ID"], colunas=colunas)
