@@ -13,5 +13,7 @@ __pycache__/
 *.har
 
 # clone à parte do repositório do Azure DevOps (git integration do workspace do
-# Fabric) — tem seu próprio remote e histórico, não faz parte deste repositório
-/workspace/
+# Fabric) — tem seu próprio remote e histórico, não faz parte deste repositório.
+# Dentro dele, a pasta Workspace/ (W maiúsculo) é onde o Fabric grava os itens;
+# esse nome vem da configuração da conexão no portal, não é escolha nossa.
+/fabric/
