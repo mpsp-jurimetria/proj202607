@@ -1,0 +1,14 @@
+{
+  "explorer.excludeGitIgnore": false,
+  "files.exclude": {
+    "**/.git": true,
+    ".claude": true,
+    "bnmp.pdpj.jus.br.har": true,
+    "python/.pytest_cache": true,
+    "python/.venv": true,
+    "python/downloads": true,
+    "**/__pycache__": true,
+    "**/*.pyc": true,
+    "fabric": false
+  }
+}
