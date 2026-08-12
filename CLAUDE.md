@@ -73,6 +73,10 @@ Arquitetura: **Lakehouse** para arquivos brutos + **Warehouse** para tabelas est
 - Credenciais em: `TENANT_ID`, `CLIENT_ID`, `CLIENT_SECRET`
 - Módulos de conexão prontos em: `python/src/infra/lakehouse.py` e `python/src/infra/warehouse.py`
 
+### Git integration do workspace
+
+O workspace do Fabric (`FABRIC_WORKSPACE_ID`) está conectado a um repositório dedicado no Azure DevOps (org `mpsp`, projeto `Jurimetria`) via login pessoal pelo portal do Fabric, não via Service Principal. Mesma decisão já tomada no projeto `infancia`: conectar/sincronizar via API com o Service Principal dá `GitCredentialsNotConfigured` e exigiria mais um segredo de longa duração (PAT do Azure DevOps) só para automatizar um clique raro — não compensa.
+
 ### Tipos T-SQL (Fabric usa T-SQL, não PostgreSQL)
 - Texto longo: `VARCHAR(MAX)` — suportado, até 16 MB por célula
 - Booleano: `BIT` (0/1) — não existe BOOLEAN nativo
