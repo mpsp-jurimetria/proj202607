@@ -123,7 +123,41 @@ simples dentro da string). É o padrão em todo o arquivo, não só título/eixo
 | `card` | `Values` | cartão simples (número grande + rótulo pequeno) |
 | `clusteredColumnChart` / `clusteredBarChart` | `Category`, `Y`, `Series` (opcional) | duas ou mais medidas em `Y` sem `Series` já viram colunas agrupadas automaticamente |
 | `lineChart` | `Category`, `Y` | `Category` aceita mais de uma coluna (cria hierarquia, ex. ano + período) |
-| `tableEx`, `pivotTable`, `multiRowCard`, `slicer`, `gauge`, `donutChart`, `pieChart` | variam | não usados ainda neste projeto, conferir antes de usar |
+| `tableEx` | `Values` | **só para tabela plana com um único tipo de campo** — ver gotcha abaixo |
+| `pivotTable` | `Rows`, `Values` | dimensões em `Rows`, medidas em `Values` — o que normalmente se quer ao ouvir "tabela" ou "matriz" |
+| `slicer` | `Values` | uma coluna só |
+| `multiRowCard`, `gauge`, `donutChart`, `pieChart` | variam | não usados ainda neste projeto, conferir antes de usar |
+
+**`tableEx` com coluna de dimensão e medida misturadas em `Values` é um anti-padrão.**
+Sintoma: o cabeçalho da primeira coluna aparece, as linhas mostram só ela, as outras
+colunas (dimensão ou medida) simplesmente não aparecem — sem erro. Confirmado numa
+fonte oficial da Microsoft (`microsoft/skills-for-fabric`, skill de autoria Power BI).
+Correção: usar `pivotTable`, com as colunas de dimensão em `Rows` e as medidas em
+`Values`:
+
+```json
+"visual": {
+  "visualType": "pivotTable",
+  "query": { "queryState": {
+    "Rows": { "projections": [
+      {"field": {"Column": {...}}, "queryRef": "...", "nativeQueryRef": "NomeColuna"}
+    ]},
+    "Values": { "projections": [
+      {"field": {"Measure": {...}}, "queryRef": "...", "nativeQueryRef": "NomeMedida"}
+    ]}
+  }},
+  "objects": {
+    "columnHeaders": [{"properties": {
+      "columnAdjustment": {"expr": {"Literal": {"Value": "'growToFit'"}}},
+      "autoSizeColumnWidth": {"expr": {"Literal": {"Value": "true"}}}
+    }}]
+  }
+}
+```
+
+`tableEx` de verdade serve só para tabela plana com um tipo de campo só (todas
+colunas ou todas medidas); no primeiro sinal de precisar misturar os dois, ir direto
+de `pivotTable`.
 
 **Referenciar coluna vs. medida no campo (`field`):**
 
@@ -198,6 +232,16 @@ measure 'Medida (por categoria)' =
 Não precisa de relacionamento — é desconectada de propósito, o `SELECTEDVALUE` pega o
 contexto de filtro do próprio eixo/slicer do visual.
 
+**Referência a medida em DAX é `[Nome da Medida]`, sem aspas internas.** As aspas
+simples só existem na *declaração* (`measure 'Nome da Medida' = ...`), nunca na
+referência. Escrever `['Nome da Medida']` (aspas dentro dos colchetes) não dá erro de
+sintaxe — o DAX interpreta como referência a uma *coluna* cujo nome inclui as aspas,
+que não existe, daí o erro só aparece depois: "The value for '...' cannot be
+determined. Either the column doesn't exist, or there is no current row for this
+column." Fácil de cair nisso especificamente quando o nome da medida começa com um
+caractere que "parece" precisar de aspas (ex.: `%`), mas a regra é sempre a mesma,
+não importa o conteúdo do nome.
+
 **Ordenar categoria por outra coluna**: propriedade `sortByColumn` na coluna que serve
 de categoria (`column Nome ... sortByColumn: Ordem`), não no visual. Mais robusto que
 tentar ordenação no `visual.json` — vale para qualquer visual que use essa coluna.
@@ -232,6 +276,19 @@ resultado alternativo. `DIVIDE(a, b, 0)` resolve a maioria dos casos. Quando o b
 vem de uma cadeia mais complexa (`COUNTROWS(FILTER(...))` sobre algo que pode ser
 `BLANK`), envolver o resultado final em `COALESCE(..., 0)` é mais garantido do que
 tentar rastrear onde exatamente o branco nasce.
+
+**Percentual "impossível" (muito acima de 100%) geralmente é denominador de
+cobertura diferente do numerador, não bug de cálculo.** Se a medida A (numerador) e a
+medida B (denominador) vêm de *seções diferentes* de um formulário/pesquisa que pode
+ser preenchido parcialmente, nada garante que as mesmas linhas/instâncias
+preencheram as duas seções. Neste projeto, "trabalho" estava preenchido em 161 de 188
+instâncias e "capacidade/ocupação" em só 4 — dividir uma pela outra comparava
+populações praticamente disjuntas e dava percentuais de milhares por cento. A malha
+que confirma isso é justamente [`leitura-onelake-sem-sql.md`](leitura-onelake-sem-sql.md):
+contar quantas instâncias têm cada campo preenchido, não só somar os valores. Solução
+não é uma medida DAX mais esperta — é aceitar que a comparação não tem base enquanto
+a cobertura for tão desigual, e mostrar contagem bruta em vez de percentual até a
+coleta de dados amadurecer.
 
 ## Paleta institucional / tema visual
 
