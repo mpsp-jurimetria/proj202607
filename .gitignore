@@ -11,3 +11,7 @@ __pycache__/
 *.pyc
 # capturas de tráfego: contêm tokens de sessão e dados pessoais
 *.har
+
+# clone à parte do repositório do Azure DevOps (git integration do workspace do
+# Fabric) — tem seu próprio remote e histórico, não faz parte deste repositório
+/workspace/
