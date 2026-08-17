@@ -75,7 +75,11 @@ Arquitetura: **Lakehouse** para arquivos brutos + **Warehouse** para tabelas est
 
 ### Git integration do workspace
 
-O workspace do Fabric (`FABRIC_WORKSPACE_ID`) está conectado a um repositório dedicado no Azure DevOps (org `mpsp`, projeto `Jurimetria`) via login pessoal pelo portal do Fabric, não via Service Principal. Mesma decisão já tomada no projeto `infancia`: conectar/sincronizar via API com o Service Principal dá `GitCredentialsNotConfigured` e exigiria mais um segredo de longa duração (PAT do Azure DevOps) só para automatizar um clique raro — não compensa.
+O workspace do Fabric (`FABRIC_WORKSPACE_ID`) está conectado a um repositório dedicado no Azure DevOps (org `mpsp`, projeto `Jurimetria`, repo `proj202607-Fabric`) via login pessoal pelo portal do Fabric, não via Service Principal. Mesma decisão já tomada no projeto `infancia`: conectar/sincronizar via API com o Service Principal dá `GitCredentialsNotConfigured` e exigiria mais um segredo de longa duração (PAT do Azure DevOps) só para automatizar um clique raro — não compensa.
+
+Essa decisão vale só para a conexão inicial. **Atualizar o workspace a partir do git (o "Update all" do portal) já está automatizado** via `python/src/infra/fabric_git.py::atualizar_workspace_do_git()`, chamado pelo Service Principal sem precisar de PAT — a credencial usada é uma conexão Fabric do tipo Azure DevOps – Source Control autenticada com o próprio SP (`credentialType: "ServicePrincipal"`, criada uma única vez via `criar_conexao_ado_service_principal()` + `configurar_credencial_git()`). Depois de cada push no repo `fabric/`, chamar essa função em vez de pedir para o usuário sincronizar manualmente pelo portal.
+
+O SP já tinha papel **Admin** neste workspace (herdado de configuração anterior, não criado para isso). A Microsoft documenta que **Contributor já é suficiente** para `git/status`, `git/updateFromGit` e `git/myGitCredentials` — vale considerar rebaixar o SP para Contributor aqui (menor privilégio), já que a equipe de TI está de olho no escopo de acesso do SP.
 
 ### Tipos T-SQL (Fabric usa T-SQL, não PostgreSQL)
 - Texto longo: `VARCHAR(MAX)` — suportado, até 16 MB por célula

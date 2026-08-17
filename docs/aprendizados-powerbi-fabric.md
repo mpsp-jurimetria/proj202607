@@ -376,3 +376,10 @@ Principal e API é possível, mas exige um segredo de longa duração adicional 
 Azure DevOps) só para automatizar uma ação que se faz raramente. Para a conexão
 inicial do workspace, login pessoal pelo portal é a escolha mais simples — decisão já
 tomada em mais de um projeto.
+
+**Atualização:** essa decisão vale só para a *conexão inicial* (o "Connect"). Puxar as
+mudanças do git para o workspace depois (o "Update all"/`updateFromGit`) é uma operação
+separada e **dá para automatizar com o Service Principal sem PAT nenhum** — usando uma
+conexão do Fabric do tipo "Azure DevOps – Source Control" autenticada com as próprias
+credenciais do SP (`credentialType: "ServicePrincipal"`), não um usuário/PAT. Detalhes
+e código em `python/src/infra/fabric_git.py` e no `CLAUDE.md`.
