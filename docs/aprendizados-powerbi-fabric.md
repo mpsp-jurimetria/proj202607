@@ -168,6 +168,36 @@ de `pivotTable`.
 {"Measure": {"Expression": {"SourceRef": {"Entity": "NomeTabela"}}, "Property": "Nome Medida"}}
 ```
 
+**Sincronizar slicer entre páginas: `syncGroup`, ausente do schema publicado mas funcional.**
+Para um slicer em uma página filtrar as outras também, adicionar `syncGroup` dentro de
+`visual` (irmão de `visualType`, `query`, `objects`):
+
+```json
+"visual": {
+  "visualType": "slicer",
+  "syncGroup": {
+    "groupName": "SyncRegional",
+    "fieldChanges": true,
+    "filterChanges": true
+  },
+  "query": { "...": "..." }
+}
+```
+
+Regras:
+- Todo slicer com o mesmo `groupName` (em qualquer página) fica sincronizado — precisa
+  existir um slicer de verdade (mesmo `visualType` e mesma coluna) em cada página que
+  deve refletir o filtro, não é uma propriedade "global" de uma única visual.
+- `fieldChanges` propaga troca de campo entre os slicers do grupo; `filterChanges`
+  propaga a seleção/filtro. Normalmente os dois `true`.
+- Os schemas publicados (`visualContainer/2.5.0`–`2.9.0`) não listam `syncGroup` —
+  achado confirmado no schema interno (`visualConfiguration/9999.0.0`) da mesma fonte
+  oficial (`microsoft/skills-for-fabric`). O Fabric/Desktop lê e grava normalmente
+  mesmo não estando no schema público; não é motivo para desconfiar da sintaxe.
+- Usado no `res_277_v2.Report` para os slicers de Regional e Município da página
+  Unidades refletirem nas demais 5 páginas (`groupName` `SyncRegional` e
+  `SyncMunicipio`).
+
 ## Registro de tema customizado
 
 Tema **compartilhado do Microsoft** (o padrão que já vem em todo relatório) fica em
