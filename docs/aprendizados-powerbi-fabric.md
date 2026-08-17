@@ -277,18 +277,29 @@ vem de uma cadeia mais complexa (`COUNTROWS(FILTER(...))` sobre algo que pode se
 `BLANK`), envolver o resultado final em `COALESCE(..., 0)` é mais garantido do que
 tentar rastrear onde exatamente o branco nasce.
 
-**Percentual "impossível" (muito acima de 100%) geralmente é denominador de
-cobertura diferente do numerador, não bug de cálculo.** Se a medida A (numerador) e a
-medida B (denominador) vêm de *seções diferentes* de um formulário/pesquisa que pode
-ser preenchido parcialmente, nada garante que as mesmas linhas/instâncias
-preencheram as duas seções. Neste projeto, "trabalho" estava preenchido em 161 de 188
-instâncias e "capacidade/ocupação" em só 4 — dividir uma pela outra comparava
-populações praticamente disjuntas e dava percentuais de milhares por cento. A malha
-que confirma isso é justamente [`leitura-onelake-sem-sql.md`](leitura-onelake-sem-sql.md):
-contar quantas instâncias têm cada campo preenchido, não só somar os valores. Solução
-não é uma medida DAX mais esperta — é aceitar que a comparação não tem base enquanto
-a cobertura for tão desigual, e mostrar contagem bruta em vez de percentual até a
-coleta de dados amadurecer.
+**Percentual "impossível" (muito acima de 100%) pode ser denominador incompleto, não
+só denominador de outra seção.** A primeira hipótese que confirmamos foi cobertura
+desigual entre seções do formulário (medida A preenchida em 161 de 188 instâncias,
+medida B em só 4 — dividir uma pela outra compara populações praticamente disjuntas).
+Mas isso não esgotou o problema: o denominador em si (Ocupação total) estava
+*subcontado*, não só pouco preenchido — ver o próximo item. Os dois efeitos se somam
+e são fáceis de confundir um pelo outro; medir cobertura ([`leitura-onelake-sem-sql.md`](leitura-onelake-sem-sql.md),
+contar quantas instâncias têm cada campo preenchido) resolve a primeira hipótese, mas
+só demonstrar o número errado por completo — reconstruindo manualmente o valor
+esperado a partir do dado bruto para uma instância específica — expõe a segunda.
+
+**Formulário com "o mesmo campo" repetido por ramificação (tipo de unidade, sexo
+etc.): conferir a seção inteira, não só a primeira variante encontrada.** Já sabíamos
+disso da seção de Trabalho (perguntas 12.1–12.4 para unidade mista, 12.5–12.8 só
+mulheres, 12.9–12.12 só homens) mas não tínhamos generalizado a lição: a seção de
+Capacidade/Ocupação tem a mesma estrutura (3.1/3.2 ambos os sexos, 3.3/3.4 só
+feminino, 3.5/3.6 só masculino) e passou batida — as medidas somavam só a primeira
+variante, subcontando toda unidade de sexo único. Sintoma que expôs o problema: um
+percentual de outra seção (nada a ver com capacidade) parecia proporcionalmente
+grande demais, o que só fazia sentido se o denominador estivesse errado. Prevenção:
+ao montar uma medida de soma sobre uma seção de formulário, buscar no metadata todo
+campo cujo *rótulo* (não o id) corresponda à mesma pergunta antes de considerar a
+medida completa — rótulos repetidos com ids diferentes são o sinal.
 
 ## Paleta institucional / tema visual
 
