@@ -383,3 +383,42 @@ separada e **dá para automatizar com o Service Principal sem PAT nenhum** — u
 conexão do Fabric do tipo "Azure DevOps – Source Control" autenticada com as próprias
 credenciais do SP (`credentialType: "ServicePrincipal"`), não um usuário/PAT. Detalhes
 e código em `python/src/infra/fabric_git.py` e no `CLAUDE.md`.
+
+## Inspecionar a definição PBIR de qualquer relatório (mesmo sem git) via API
+
+Não precisa de captura de tela nem de acesso ao Desktop para estudar como outro
+relatório foi montado: com acesso de leitura ao workspace, dá para baixar a definição
+PBIR completa (todo `page.json`/`visual.json`/`report.json`, em base64) de qualquer
+Report via API, mesmo que o item nunca tenha sido conectado a git:
+
+```
+GET  /v1/workspaces                                  → achar o workspaceId
+GET  /v1/workspaces/{workspaceId}/items                → achar o itemId do Report
+POST /v1/workspaces/{workspaceId}/items/{itemId}/getDefinition   → LRO, decodificar
+     cada `parts[].payload` (base64) para reconstruir a pasta PBIR inteira
+```
+
+Usado para estudar o relatório "Painel HUGO" (workspace `HUGO-DEV`, acesso dado pelo
+usuário) e extrair, de um relatório real e não de suposição, os padrões abaixo:
+
+- **`pageNavigator`**: visual nativo que substitui a lista de páginas lateral por uma
+  barra de botões (a navegação "Capa / Visão Geral / Detalhamento..."). Não precisa de
+  botões manuais com bookmark — um visual só, sem `query`. Cor da aba ativa/inativa via
+  `objects.fill`, com dois seletores especiais: `{"selector": {"id": "default"}}` (abas
+  não selecionadas) e `{"selector": {"id": "selected"}}` (aba ativa). Esconder uma
+  página específica da barra: `objects.pages` com `properties.showPage: false` e
+  `selector.id` = id da página.
+- **Cards com acabamento (fundo + borda arredondada)**: em `visualContainerObjects`,
+  `background` (`show`, `color`, `transparency`) + `border` (`show`, `color`, `radius`,
+  `width`) — é o que dá o efeito "pílula colorida" nos KPIs. Nossos cards atuais não
+  usam nenhum dos dois (ficam no branco/sem borda padrão) — é a melhoria mais barata de
+  aplicar num redesign.
+- **`textbox`** com texto rico para título de página/banner: `objects.general.properties.paragraphs[].textRuns[]`,
+  cada run com seu próprio `textStyle` (`fontWeight`, `fontSize` em pt) e o parágrafo
+  com `horizontalTextAlignment`.
+- **`image`** (visualType) para logomarca; **`shape`** (visualType) para linha
+  decorativa fina (usado como separador de rodapé).
+- O filtro em árvore desse relatório usa um **custom visual da AppSource** (Hierarchy
+  Slicer, `visualType` vira o próprio nome do custom visual, ex.
+  `HierarchySlicer1458836712039`) — não é nativo, precisa importar o custom visual no
+  relatório antes de poder usar; é a única peça dos achados que não é "grátis".
