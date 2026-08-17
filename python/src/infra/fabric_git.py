@@ -106,11 +106,14 @@ def status_git(workspace_id: str) -> dict[str, Any]:
     return resp.json()
 
 
-def atualizar_workspace_do_git(workspace_id: str, allow_override_items: bool = False) -> dict[str, Any]:
+def atualizar_workspace_do_git(workspace_id: str, allow_override_items: bool = True) -> dict[str, Any]:
     """Aplica ao workspace os commits mais recentes do branch git conectado
     (equivalente ao botão 'Update all' do portal). Prefere sempre o conteúdo
     do git em caso de conflito, já que este workspace só deve ser editado por
-    aqui, nunca diretamente no portal."""
+    aqui, nunca diretamente no portal. `allowOverrideItems: true` por padrão
+    porque a API do Fabric exige esse consentimento sempre que há qualquer
+    item modificado vindo do git, não só em conflito de verdade — sem ele,
+    a chamada falha com 'OverrideItemsNotAllowed' mesmo sem conflito real."""
     status = status_git(workspace_id)
     if status["workspaceHead"] == status["remoteCommitHash"] and not status["changes"]:
         logger.info("Workspace já está atualizado, nada a fazer.")
