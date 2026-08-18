@@ -422,3 +422,107 @@ usuário) e extrair, de um relatório real e não de suposição, os padrões ab
   Slicer, `visualType` vira o próprio nome do custom visual, ex.
   `HierarchySlicer1458836712039`) — não é nativo, precisa importar o custom visual no
   relatório antes de poder usar; é a única peça dos achados que não é "grátis".
+
+## Unificar duas fontes de dados (dois formulários CNMP) numa mesma medida
+
+Contexto: o formulário 1322 foi descontinuado pelo CNMP após 1º Sem/2024; o vigente
+(1342) cobre daí em diante. Precisávamos de uma série histórica única.
+
+**Calculated table não pode referenciar tabela Direct Lake.** Tentativa inicial: uma
+tabela calculada via `UNION(SELECTCOLUMNS(fato_1322,...), SELECTCOLUMNS(fato_1342,...))`.
+O sync do Fabric rejeita com o erro (verbatim): *"We cannot refresh this dataset because
+the dataset contains calculated tables or calculated columns referring to Direct Lake
+data source. Please configure the dataset to use an explicit connection with granular
+access control..."* — é uma limitação de plataforma, não um bug de sintaxe. Sintomas
+anteriores enganosos no mesmo caminho: erros de `relationship ... uses an invalid column
+ID` que pareciam ser de direção/nome de relacionamento errado, mas eram só efeito
+colateral da tabela calculada nunca materializar de verdade.
+
+**Solução que funciona: nada de tabela nova — medidas que decidem a fonte via
+`SELECTEDVALUE` de uma tabela desconectada.** Mesmo padrão já usado para
+Regime/Modalidade/IndicadorSaude/etc, estendido para um novo eixo "Período":
+
+```dax
+measure 'Taxa de ocupação (Res. 277)' =
+    VAR SelPeriodo = SELECTEDVALUE('Periodo'[AnoPeriodo])
+    RETURN IF(HASONEVALUE('Periodo'[AnoPeriodo]),
+        IF(SelPeriodo = 20241,
+            CALCULATE(<fórmula usando fato_1322>, 'fato_1322'[ano]*10+'fato_1322'[periodo] = SelPeriodo),
+            CALCULATE(<fórmula usando fato_1342>, 'fato_1342'[ano]*10+'fato_1342'[periodo] = SelPeriodo)
+        ),
+        BLANK()
+    )
+```
+
+`Periodo` é uma tabela calculada **estática** (`DATATABLE`, mesmo padrão de
+Regime/Modalidade — não uma derivada via `SUMMARIZE` de outra tabela, isso também
+esbarra na mesma restrição de Direct Lake) com uma coluna `Rotulo` no formato
+**"2024 - 1º Sem"** (ano primeiro) em vez de "1º Sem/2024" — necessário porque
+`sortByColumn` e `sortDefinition` não garantem ordem cronológica confiável em
+categorias de texto num slicer (ver seção seguinte); com o ano na frente, a ordem
+alfabética já é a ordem cronológica, sem depender de nada.
+
+**Filtro obrigatório de período (mostrar só 1 por vez), duas camadas:**
+1. Slicer dedicado (`Periodo.Rotulo`), sincronizado entre páginas via `syncGroup` (mesmo
+   grupo em todas).
+2. Trava na própria medida (`HASONEVALUE('Periodo'[AnoPeriodo])` → `BLANK()` se nenhum
+   período único selecionado) — protege mesmo se o usuário limpar o slicer.
+
+**Gráfico de "evolução" (mostra todos os períodos) precisa ignorar o próprio slicer de
+período** — senão vira uma linha de 1 ponto só. `visualInteractions` no `page.json`:
+```json
+"visualInteractions": [
+  { "source": "<id do slicer de Período>", "target": "<id do gráfico de evolução>", "type": "NoFilter" }
+]
+```
+`"NoFilter"` = a fonte não filtra o alvo; default (sem entrada) é cross-filtrar
+normalmente. Regional/Município continuam filtrando o gráfico de evolução normalmente,
+só o Período que é excluído.
+
+**Multi-tabela particionada (form grande): usar `LOOKUPVALUE`, não `RELATED`.** Quando
+um formulário é grande demais e o `load_gold.py` particiona os campos em `fato_visita_N`
++ `_p2`...`_pN` (documentado antes), somar campos de tabelas diferentes na mesma medida
+funciona com:
+```dax
+LOOKUPVALUE('fato_visita_1342_pX'[coluna], 'fato_visita_1342_pX'[instancia_id_api], 'fato_visita_1342'[instancia_id_api])
+```
+Preferido a `RELATED` aqui por não depender de decorar a direção exata do
+relacionamento 1:1 já registrado entre a tabela base e cada partição — funciona
+independente da direção declarada.
+
+**Direção de relacionamento: `fromColumn` é sempre o lado "muitos" (a tabela fato),
+`toColumn` o lado "um" (a dimensão)** — inverter causa `invalid column ID` no sync,
+mesmo com nomes de coluna corretos. Confirmado batendo com o padrão já usado em toda
+`relationships.tmdl` (`fato_visita_X.entidade_id_api → dim_unidade.entidade_id_api`).
+
+**Formulário redesenhado ≠ mesmo formulário com nomes de campo diferentes — sempre
+checar `dependencias` antes de mapear campo por campo.** Achados reais desta migração,
+cada um um jeito diferente de "campo que parece 1:1 mas não é":
+- Campo condicional por sexo do estabelecimento (campo controlador único, 3 respostas
+  FEMININO/MASCULINO/AMBOS) substituindo as sub-seções sempre-visíveis do formulário
+  antigo — mesma armadilha de "somar todas as variantes", mecanismo diferente.
+- Campo condicional por uma resposta SIM/NÃO/INSUFICIENTE anterior (ex.: "a unidade
+  oferece vagas de trabalho?") gerando duas cópias da mesma pergunta subsequente.
+- Conceito que muda de tipo: SIM/NÃO virou um campo de duração real em texto
+  (comparação lexicográfica `>= "02:00"` funciona por ser zero-padded).
+- Conceito que muda de seção inteira (banho de sol saiu de Saúde para Organização
+  Administrativa).
+- Conceito que muda de grão: contagem direta (`Indígenas`, `Estrangeiros`) virou parte
+  de um cruzamento raça/cor × gênero da população geral — precisa somar vários campos
+  espalhados em vez de um só.
+- Conceito que **deixou de existir**: `Adolescentes`, `Cela de proteção`, `Vagas de
+  educação` (capacidade) e a separação por sexo em Trabalho não têm equivalente no
+  formulário novo. Não dá pra inventar — a medida unificada usa `BLANK()` para o
+  formulário novo nesses casos (dado real de quando existia continua acessível
+  selecionando o período antigo, só não é mais coletado daí em diante).
+
+**Tabela de detalhe (grão "uma linha por visita") não pode misturar as duas fontes.**
+As medidas acima (que decidem a fonte pelo *slicer*) fazem sentido pra cards/gráficos
+de resumo, onde só 1 período está selecionado por vez — mas numa tabela mostrando
+várias linhas (uma por visita), o contexto de período vem de **cada linha**, não do
+slicer, então essas medidas dão o mesmo valor errado repetido em todas as linhas.
+Solução: medidas separadas, sem `SELECTEDVALUE`/`HASONEVALUE`, usando só as colunas
+`ano`/`periodo` que já vêm naturalmente no contexto de linha da tabela — e aceitar que
+a tabela de detalhe só consegue ter uma fonte por vez (nesse caso, optou-se por só
+1342, o formulário vigente, deixando o histórico do 1322 de fora dessa tabela
+específica).
