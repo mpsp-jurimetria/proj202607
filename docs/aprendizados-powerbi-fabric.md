@@ -526,3 +526,37 @@ Solução: medidas separadas, sem `SELECTEDVALUE`/`HASONEVALUE`, usando só as c
 a tabela de detalhe só consegue ter uma fonte por vez (nesse caso, optou-se por só
 1342, o formulário vigente, deixando o histórico do 1322 de fora dessa tabela
 específica).
+
+## Filtro de nível relatório não serve como "valor padrão que dá pra trocar"
+
+Tentativa (revertida): um filtro `Categorical`/`In` em `report.json` (com
+`isHiddenInViewMode: true`) fixando `Periodo.Rotulo = '2026 - 1º Sem'`, pra abrir o
+relatório sempre no período mais recente sem aparecer no painel de filtros. **Não
+funciona como esperado**: um filtro de relatório/página/visual do tipo `Categorical`
+restringe de verdade a tabela à(s) linha(s) listada(s) — não é uma "pré-seleção", é um
+filtro de dado normal. Como a tabela `Periodo` fica reduzida a 1 linha pro relatório
+inteiro, **a própria segmentação de Período** (que lê os valores distintos de
+`Periodo.Rotulo`) passa a mostrar só essa 1 opção — impossível escolher outro
+semestre. Sintoma: usuário vê só um período na lista da segmentação e não entende por
+quê. Não existe um jeito de aplicar um filtro desse tipo "menos" à segmentação que lê
+o mesmo campo.
+
+O mecanismo certo pra "valor pré-selecionado, mas o campo continua com todas as opções
+disponíveis" é o **estado de seleção da própria segmentação** (`objects.general.filter`
+com `decomposedIdentities`/`valueMap`) — não avaliado nesta rodada por parecer arriscado
+de escrever à mão sem gerar via Desktop primeiro. Se for retomar isso, a via segura é
+abrir o relatório no Power BI Desktop, selecionar o valor desejado na segmentação, salvar
+e conferir o JSON gerado — não tentar escrever esse bloco à mão de novo.
+
+## Filtro de exclusão (blank) auto-referenciando o campo da própria segmentação: não confiável escrito à mão
+
+Tentativa (revertida): filtro de nível visual (`type: "Exclude"`, condição `In` com
+`null`/`''`) numa segmentação, mirando o **mesmo campo** que a segmentação exibe (ex.:
+segmentação de `regional` filtrando `regional not in (null, '')`), pra tirar o membro
+"(Blank)" da lista. Resultado real em produção: em vez de só esconder o `(Blank)`, a
+lista inteira ficou reduzida a só o `(Blank)` — o oposto do esperado. O padrão genérico
+de "Exclude/Include Filter" documentado funciona para filtrar um campo B a partir de um
+filtro em campo A; auto-referenciar o mesmo campo que a segmentação projeta parece ser
+um caso especial que o Desktop trata diferente internamente. Mesma recomendação do item
+anterior: não hand-authorar esse caso específico sem antes ver o JSON que o Desktop
+gera.
